@@ -15,5 +15,6 @@ dependencies {
 
 tasks.named("test").configure {
   // do not enable TRACE_ENABLED
-  systemProperties.remove('es.insecure_network_trace_enabled')
+  // TODO excluding an element from a list property
+  systemProperties.set(systemProperties.get().findAll { k, v -> k != 'es.insecure_network_trace_enabled' })
 }
