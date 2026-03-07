@@ -23,7 +23,7 @@ dependencies {
 
 def outputDir = layout.buildDirectory.dir("jdk-patches")
 def generatePatch = tasks.register("generatePatch", JavaExec)
-generatePatch.configure {
+generatePatch.configure { JavaExec it ->
   dependsOn tasks.named("compileJava")
   inputs.property("java-home-set", buildParams.getIsRuntimeJavaHomeSet())
   inputs.property("java-version", buildParams.runtimeJavaVersion)
@@ -41,9 +41,7 @@ generatePatch.configure {
         JvmVendorSpec.matching(VersionProperties.bundledJdkVendor)
     }
   }
-  doFirst {
-    args outputDir.get().getAsFile().toString()
-  }
+  (it as JavaExec).args.add(outputDir.map { it.asFile.toString()})
 }
 
 artifacts.add("patch", generatePatch);
