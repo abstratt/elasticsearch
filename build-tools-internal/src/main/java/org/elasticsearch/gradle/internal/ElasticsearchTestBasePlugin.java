@@ -107,11 +107,11 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                     File testWorkingDir = test.getWorkingDir().getAsFile().get();
                     mkdirs(testWorkingDir);
                     mkdirs(testWorkingDir.toPath().resolve("temp").toFile());
-
-                    // TODO remove once jvm.options are added to test system properties
-                    test.systemProperty("java.locale.providers", "CLDR");
                 }
             });
+
+            // TODO remove once jvm.options are added to test system properties
+            test.systemProperty("java.locale.providers", "CLDR");
             test.getJvmArgumentProviders().add(nonInputProperties);
             test.getExtensions().add("nonInputProperties", nonInputProperties);
 
