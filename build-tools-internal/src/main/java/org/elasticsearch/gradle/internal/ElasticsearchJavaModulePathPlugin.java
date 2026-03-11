@@ -99,7 +99,17 @@ public abstract class ElasticsearchJavaModulePathPlugin implements Plugin<Projec
             task.getOptions().getCompilerArgumentProviders().add(argumentProvider);
             FileCollection classpath = task.getClasspath();
             if (isIdea() == false && task.getClasspath() != null) {
-                //TODO-RC using #replace to avoid StackOverflowError - note this is not API yet
+                // Replacing this:
+                // FileCollection trimmedClasspath = classpath.minus(moduleCompileClasspath);
+                // task.setClasspath(project.files(trimmedClasspath));
+                //
+                // with this:
+                // FileCollection trimmedClasspath = classpath.plus(moduleCompileClasspath);
+                // task.getClasspath().setFrom(project.files(trimmedClasspath));
+                //
+                // leads to StackOverflowError (https://github.com/gradle/gradle/issues/8755#issuecomment-4038905903)
+
+                // TODO-RC using #replace to avoid StackOverflowError - note this is not API yet
                 ((DefaultConfigurableFileCollection) task.getClasspath()).replace(it -> it.minus(moduleCompileClasspath));
             }
             task.doLast(new Action<Task>() {
