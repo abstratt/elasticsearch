@@ -158,7 +158,8 @@ public abstract class LoggedExec extends DefaultTask implements FileSystemOperat
             execSpec.getStandardOutput().set(finalOutputStream);
             execSpec.getErrorOutput().set(finalOutputStream);
             execSpec.getExecutable().set(getExecutable());
-            execSpec.getEnvironment().set(getEnvironment().zip(getNonTrackedEnvironment(), (a, b) -> { a.putAll(b); return a; }));
+            execSpec.getEnvironment().putAll(getEnvironment());
+            execSpec.getEnvironment().putAll(getNonTrackedEnvironment());
             if (getArgs().isPresent()) {
                 Provider<Iterable<String>> argsProvider = getArgs().map(it -> it.stream().map(Object::toString).collect(Collectors.toCollection(ArrayList::new)));
                 execSpec.getArgs().set(argsProvider);
