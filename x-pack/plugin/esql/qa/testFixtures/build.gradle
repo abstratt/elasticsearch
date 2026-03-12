@@ -20,6 +20,8 @@ dependencies {
  * This is needed for CsvTestsDataLoaderTests to reflect the classpath that CsvTestsDataLoader actually uses when "main" method is executed.
  */
 tasks.named("test").configure {
+  // XXX-RC ConfigurableFileCollection does not support '-=' operator or assignment of subtraction via '-' operator or a minus() method
+  // classpath = classpath - (configurations.resolveableCompileOnly - configurations.runtimeClasspath)
   classpath.setFrom(classpath - (configurations.resolveableCompileOnly - configurations.runtimeClasspath))
 }
 
