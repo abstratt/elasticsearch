@@ -22,7 +22,6 @@ import org.gradle.api.Plugin;
 import org.gradle.api.Project;
 import org.gradle.api.XmlProvider;
 import org.gradle.api.file.ProjectLayout;
-import org.gradle.api.file.RegularFile;
 import org.gradle.api.plugins.BasePlugin;
 import org.gradle.api.plugins.BasePluginExtension;
 import org.gradle.api.plugins.ExtensionContainer;
@@ -139,12 +138,9 @@ public class PublishPlugin implements Plugin<Project> {
         var projectVersion = providerFactory.provider(() -> (String) project.getVersion());
         var generateMavenPoms = project.getTasks().withType(GenerateMavenPom.class);
         generateMavenPoms.configureEach(pomTask -> {
-            Provider<String> namer = archivesBaseName.zip(projectVersion, (BiFunction<String, String, String>) (base, version) ->
-                String.format(
-                    "distributions/%s-%s.pom",
-                    base, version
-                ));
-            pomTask.getDestination().value(projectLayout.getBuildDirectory().file(namer));
+            pomTask.getDestination().set(projectLayout.getBuildDirectory().map(it ->
+                it.file("distributions/%s-%s.pom".formatted(archivesBaseName.get(), projectVersion))
+            ));
         });
 
         var publishing = extensions.getByType(PublishingExtension.class);
