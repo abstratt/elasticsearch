@@ -23,6 +23,7 @@ import org.gradle.api.artifacts.result.ResolvedDependencyResult;
 import org.gradle.api.attributes.LibraryElements;
 import org.gradle.api.attributes.Usage;
 import org.gradle.api.file.FileCollection;
+import org.gradle.api.internal.file.collections.DefaultConfigurableFileCollection;
 import org.gradle.api.logging.Logger;
 import org.gradle.api.plugins.JavaPlugin;
 import org.gradle.api.tasks.CompileClasspath;
@@ -98,9 +99,7 @@ public abstract class ElasticsearchJavaModulePathPlugin implements Plugin<Projec
             task.getOptions().getCompilerArgumentProviders().add(argumentProvider);
             FileCollection classpath = task.getClasspath();
             if (isIdea() == false && task.getClasspath() != null) {
-                FileCollection trimmedClasspath = classpath.minus(moduleCompileClasspath);
-                // setClasspath(FileCollection) removed in EAP; use setFrom() on the ConfigurableFileCollection property
-                task.getClasspath().setFrom(project.files(trimmedClasspath));
+                ((DefaultConfigurableFileCollection) task.getClasspath()).replace(it -> it.minus(moduleCompileClasspath));
             }
             task.doLast(new Action<Task>() {
                 @Override
