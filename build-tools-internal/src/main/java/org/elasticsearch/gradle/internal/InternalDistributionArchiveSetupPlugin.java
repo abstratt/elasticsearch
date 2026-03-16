@@ -119,7 +119,8 @@ public class InternalDistributionArchiveSetupPlugin implements Plugin<Project> {
         // common config across all tars
         project.getTasks().withType(SymbolicLinkPreservingTar.class).configureEach(t -> {
             t.getArchiveExtension().set("tar.gz");
-            t.setCompression(Compression.GZIP);
+            // setCompression(Compression) removed in EAP; use the property API instead
+            t.getCompression().set(Compression.GZIP);
         });
     }
 

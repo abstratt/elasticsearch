@@ -45,9 +45,9 @@ public class GitWrapper {
         final ByteArrayOutputStream stdout = new ByteArrayOutputStream();
 
         execOperations.exec(spec -> {
-            // The redundant cast is to silence a compiler warning.
-            spec.setCommandLine((Object[]) args);
-            spec.setStandardOutput(stdout);
+            // ExecSpec eager setters removed in EAP; use commandLine() method and property API instead
+            spec.commandLine((Object[]) args);
+            spec.getStandardOutput().set(stdout);
         });
 
         return stdout.toString(StandardCharsets.UTF_8);

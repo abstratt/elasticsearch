@@ -25,6 +25,7 @@ import org.gradle.external.javadoc.JavadocOfflineLink;
 import org.gradle.external.javadoc.StandardJavadocDocletOptions;
 
 import java.io.File;
+import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
@@ -43,7 +44,8 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
             // the "value" -quiet is added, separated by a space. This is ok since the javadoc
             // command already adds -quiet, so we are just duplicating it
             // see https://discuss.gradle.org/t/add-custom-javadoc-option-that-does-not-take-an-argument/5959
-            javadoc.getOptions().setEncoding("UTF8");
+            // setEncoding(String) removed in EAP; use the property API instead
+            javadoc.getOptions().getEncoding().set("UTF8");
             ((StandardJavadocDocletOptions) javadoc.getOptions()).addStringOption("Xdoclint:all,-missing", "-quiet");
 
             // ensure that modular dependencies can be found on the module path
@@ -99,8 +101,9 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
             project.evaluationDependsOn(upstreamProject.getPath());
             project.getTasks().named("javadoc", Javadoc.class).configure(javadoc -> {
                 Javadoc upstreamJavadoc = upstreamProject.getTasks().named("javadoc", Javadoc.class).get();
-                javadoc.setSource(javadoc.getSource().plus(upstreamJavadoc.getSource()));
-                javadoc.setClasspath(javadoc.getClasspath().plus(upstreamJavadoc.getClasspath()));
+                // setSource()/setClasspath() removed in EAP; use source() to add and from() on the classpath property
+                javadoc.source(upstreamJavadoc.getSource());
+                javadoc.getClasspath().from(upstreamJavadoc.getClasspath());
             });
             /*
              * Instead we need the upstream project's javadoc classpath so
@@ -126,12 +129,12 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
                 javadoc.doFirst(new Action<Task>() {
                     @Override
                     public void execute(Task task) {
-                        List<JavadocOfflineLink> existingJavadocOfflineLinks = ((StandardJavadocDocletOptions) javadoc.getOptions())
-                            .getLinksOffline()
-                            .stream()
-                            .filter(javadocOfflineLink -> new File(projectDir, javadocOfflineLink.getPackagelistLoc()).exists())
-                            .toList();
-                        ((StandardJavadocDocletOptions) javadoc.getOptions()).setLinksOffline(existingJavadocOfflineLinks);
+                        // getLinksOffline() now returns ListProperty<JavadocOfflineLink> in EAP;
+                        // removeIf() is not available on ListProperty, so copy, filter, and set back
+                        var docletOptions = (StandardJavadocDocletOptions) javadoc.getOptions();
+                        List<JavadocOfflineLink> filtered = new ArrayList<>(docletOptions.getLinksOffline().get());
+                        filtered.removeIf(link -> new File(projectDir, link.getPackagelistLoc()).exists() == false);
+                        docletOptions.getLinksOffline().set(filtered);
 
                     }
                 });

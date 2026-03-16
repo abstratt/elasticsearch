@@ -95,7 +95,11 @@ gradlePlugin {
 def generateVersionProperties = tasks.register("generateVersionProperties", WriteProperties) {
     destinationFile = new File(buildDir, "version.properties");
     comment = 'Generated version properties'
-    properties(versions)
+    // WriteProperties.properties(Map) removed in EAP; Groovy intercepts getProperties() as its own GDK
+    // method (returning the bean property map), so we must use property(name, value) for each entry instead
+    versions.stringPropertyNames().each { String name ->
+        property(name, versions.getProperty(name))
+    }
 }
 
 tasks.named("processResources").configure {

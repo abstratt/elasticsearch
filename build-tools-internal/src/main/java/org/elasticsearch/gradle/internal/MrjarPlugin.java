@@ -114,7 +114,8 @@ public class MrjarPlugin implements Plugin<Project> {
             SourceSetContainer sourceSets = GradleUtils.getJavaSourceSets(project);
             FileCollection mainRuntime = sourceSets.getByName(SourceSet.MAIN_SOURCE_SET_NAME).getOutput();
             FileCollection testRuntime = sourceSets.getByName(SourceSet.TEST_SOURCE_SET_NAME).getRuntimeClasspath();
-            testTask.setClasspath(testRuntime.minus(mainRuntime).plus(project.files(jarTask)));
+            // setClasspath(FileCollection) removed in EAP; use setFrom() on the ConfigurableFileCollection property
+            testTask.getClasspath().setFrom(testRuntime.minus(mainRuntime).plus(project.files(jarTask)));
         });
     }
 
@@ -206,8 +207,9 @@ public class MrjarPlugin implements Plugin<Project> {
                 FileCollection mainRuntime = sourceSets.getByName(mainSourceSetName).getOutput();
                 testRuntime = testRuntime.minus(mainRuntime);
             }
-            testTask.setClasspath(testRuntime.plus(project.files(jarTask)));
-            testTask.setTestClassesDirs(sourceSet.getOutput().getClassesDirs());
+            // setClasspath(FileCollection) removed in EAP; use setFrom() on the ConfigurableFileCollection property
+            testTask.getClasspath().setFrom(testRuntime.plus(project.files(jarTask)));
+            testTask.getTestClassesDirs().setFrom(sourceSet.getOutput().getClassesDirs());
 
             // only set the jdk if runtime java isn't set because setting the toolchain is incompatible with
             // runtime java setting the executable directly

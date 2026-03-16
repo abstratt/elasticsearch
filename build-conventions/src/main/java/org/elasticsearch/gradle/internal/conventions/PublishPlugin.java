@@ -45,7 +45,6 @@ import org.w3c.dom.Element;
 
 import java.io.File;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import javax.inject.Inject;
 
@@ -137,12 +136,12 @@ public class PublishPlugin implements Plugin<Project> {
         var projectVersion = providerFactory.provider(() -> project.getVersion());
         var generateMavenPoms = project.getTasks().withType(GenerateMavenPom.class);
         generateMavenPoms.configureEach(pomTask -> {
-            pomTask.setDestination(
-                (Callable<String>) () -> String.format(
-                    "%s/distributions/%s-%s.pom",
-                    projectLayout.getBuildDirectory().get().getAsFile().getPath(),
-                    archivesBaseName.get(),
-                    projectVersion.get()
+            // setDestination(Callable) removed in EAP; getDestination() is now a RegularFileProperty
+            // that must be wired with a lazy Provider<RegularFile> to stay compatible with configuration cache
+            pomTask.getDestination().set(
+                projectLayout.getBuildDirectory().file(
+                    archivesBaseName.zip(projectVersion, (base, version) ->
+                        String.format("distributions/%s-%s.pom", base, version))
                 )
             );
         });
@@ -155,8 +154,9 @@ public class PublishPlugin implements Plugin<Project> {
                 // Add git origin info to generated POM files for internal builds
                 addScmInfo(xml, gitInfo.get());
             });
-            // have to defer this until archivesBaseName is set
-            project.afterEvaluate(p -> publication.setArtifactId(archivesBaseName.get()));
+            // setArtifactId(String) removed in EAP; use the property API with a lazy Provider so
+            // afterEvaluate is no longer needed — the provider resolves at execution time
+            publication.getArtifactId().set(archivesBaseName);
             generatePomTask.configure(t -> t.dependsOn(generateMavenPoms));
         });
     }

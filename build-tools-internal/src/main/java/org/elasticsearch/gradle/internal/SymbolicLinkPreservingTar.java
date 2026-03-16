@@ -17,10 +17,9 @@ import org.gradle.api.GradleException;
 import org.gradle.api.file.FileCopyDetails;
 import org.gradle.api.file.RegularFile;
 import org.gradle.api.internal.file.CopyActionProcessingStreamAction;
+import org.apache.commons.compress.compressors.bzip2.BZip2CompressorOutputStream;
+import org.apache.commons.compress.compressors.gzip.GzipCompressorOutputStream;
 import org.gradle.api.internal.file.archive.compression.ArchiveOutputStreamFactory;
-import org.gradle.api.internal.file.archive.compression.Bzip2Archiver;
-import org.gradle.api.internal.file.archive.compression.GzipArchiver;
-import org.gradle.api.internal.file.archive.compression.SimpleCompressor;
 import org.gradle.api.internal.file.copy.CopyAction;
 import org.gradle.api.internal.file.copy.CopyActionProcessingStream;
 import org.gradle.api.internal.file.copy.FileCopyDetailsInternal;
@@ -29,7 +28,9 @@ import org.gradle.api.tasks.WorkResult;
 import org.gradle.api.tasks.WorkResults;
 import org.gradle.api.tasks.bundling.Tar;
 
+import java.io.BufferedOutputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -45,12 +46,15 @@ public abstract class SymbolicLinkPreservingTar extends Tar {
 
     @Override
     protected CopyAction createCopyAction() {
-        final ArchiveOutputStreamFactory compressor = switch (getCompression()) {
-            case BZIP2 -> Bzip2Archiver.getCompressor();
-            case GZIP -> GzipArchiver.getCompressor();
-            default -> new SimpleCompressor();
+        // Bzip2Archiver/GzipArchiver/SimpleCompressor constructors now require ReadableResourceInternal in EAP;
+        // use Apache Commons Compress directly via lambdas to avoid Gradle internal API dependency
+        final ArchiveOutputStreamFactory compressor = switch (getCompression().get()) {
+            case BZIP2 -> destFile -> new BZip2CompressorOutputStream(new BufferedOutputStream(new FileOutputStream(destFile)));
+            case GZIP -> destFile -> new GzipCompressorOutputStream(new BufferedOutputStream(new FileOutputStream(destFile)));
+            default -> destFile -> new BufferedOutputStream(new FileOutputStream(destFile));
         };
-        return new SymbolicLinkPreservingTarCopyAction(getArchiveFile(), compressor, isPreserveFileTimestamps());
+        // isPreserveFileTimestamps() removed in EAP; getPreserveFileTimestamps() now returns Property<Boolean>
+        return new SymbolicLinkPreservingTarCopyAction(getArchiveFile(), compressor, getPreserveFileTimestamps().get());
     }
 
     private static class SymbolicLinkPreservingTarCopyAction implements CopyAction {

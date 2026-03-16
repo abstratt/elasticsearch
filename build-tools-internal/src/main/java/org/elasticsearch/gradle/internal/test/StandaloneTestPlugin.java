@@ -39,8 +39,9 @@ public class StandaloneTestPlugin implements Plugin<Project> {
         project.getDependencies().add(testSourceSet.getImplementationConfigurationName(), project.project(":test:framework"));
 
         project.getTasks().withType(Test.class).configureEach(test -> {
-            test.setTestClassesDirs(testSourceSet.getOutput().getClassesDirs());
-            test.setClasspath(testSourceSet.getRuntimeClasspath());
+            // setTestClassesDirs/setClasspath removed in EAP; use setFrom() on the ConfigurableFileCollection properties
+            test.getTestClassesDirs().setFrom(testSourceSet.getOutput().getClassesDirs());
+            test.getClasspath().setFrom(testSourceSet.getRuntimeClasspath());
         });
         TaskProvider<Test> testTask = project.getTasks().register("test", Test.class);
         testTask.configure(test -> {

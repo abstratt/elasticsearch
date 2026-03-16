@@ -90,7 +90,8 @@ public class InternalBwcGitPlugin implements Plugin<Project> {
                 @Override
                 public void execute(Task task) {
                     LoggedExec.exec(execOperations, spec -> {
-                        spec.setWorkingDir(gitExtension.getCheckoutDir());
+                        // setWorkingDir() removed in EAP; use workingDir() DSL method with the resolved file
+                        spec.workingDir(gitExtension.getCheckoutDir().get());
                         String remoteRepo = remote.get();
                         // for testing only we can override the base remote url
                         String remoteRepoUrl = providerFactory.systemProperty("testRemoteRepo")
@@ -217,7 +218,8 @@ public class InternalBwcGitPlugin implements Plugin<Project> {
     private String execInCheckoutDir(Action<ExecSpec> execSpecConfig) {
         ByteArrayOutputStream os = new ByteArrayOutputStream();
         ExecResult exec = execOperations.exec(execSpec -> {
-            execSpec.setStandardOutput(os);
+            // setStandardOutput(OutputStream) removed in EAP; use the property API instead
+            execSpec.getStandardOutput().set(os);
             execSpec.workingDir(gitExtension.getCheckoutDir().get());
             execSpecConfig.execute(execSpec);
         });
