@@ -118,7 +118,8 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             // setWorkingDir(File) removed in EAP; use the DirectoryProperty API instead
             test.getWorkingDir().set(project.file(project.getBuildDir() + "/testrun/" + test.getName().replace("#", "_")));
             // setMaxParallelForks(int) removed in EAP; use the property API instead
-            test.getMaxParallelForks().set(Integer.parseInt(System.getProperty("tests.jvms", buildParams.get().getDefaultParallel().toString())));
+            test.getMaxParallelForks()
+                .set(Integer.parseInt(System.getProperty("tests.jvms", buildParams.get().getDefaultParallel().toString())));
 
             test.exclude("**/*$*.class");
 
@@ -150,7 +151,11 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                 }
             });
             test.getJvmArgumentProviders()
-                .add(() -> List.of("-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().get().getMajorVersion()));
+                .add(
+                    () -> List.of(
+                        "-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().get().getMajorVersion()
+                    )
+                );
 
             String argline = System.getProperty("tests.jvm.argline");
             if (argline != null) {

@@ -180,7 +180,10 @@ public class RestTestBasePlugin implements Plugin<Project> {
             // Enable parallel execution for these tests since each test gets its own cluster
             // setMaxParallelForks(int) removed in EAP; use the property API instead
             task.getMaxParallelForks().set(Math.max(1, task.getProject().getGradle().getStartParameter().getMaxWorkerCount() / 2));
-            nonInputSystemProperties.systemProperty(TESTS_MAX_PARALLEL_FORKS_SYSPROP, () -> String.valueOf(task.getMaxParallelForks().get()));
+            nonInputSystemProperties.systemProperty(
+                TESTS_MAX_PARALLEL_FORKS_SYSPROP,
+                () -> String.valueOf(task.getMaxParallelForks().get())
+            );
 
             // Disable test failure reporting since this stuff is now captured in build scans
             task.getExtensions().getByType(ErrorReportingTestListener.class).setDumpOutputOnFailure(false);

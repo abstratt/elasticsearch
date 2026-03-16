@@ -94,7 +94,8 @@ tasks.named("processTestResources").configure {
 
 tasks.register("integTest", Test) {
   outputs.doNotCacheIf('Build cache is disabled for Docker tests') { true }
-  maxParallelForks = '1'
+  // maxParallelForks is now a Property<Integer> in EAP; String values are rejected, use an integer literal
+  maxParallelForks = 1
   include '**/*IT.class'
 }
 

@@ -32,7 +32,6 @@ import org.gradle.api.tasks.testing.Test;
 import org.gradle.jvm.toolchain.JavaLanguageVersion;
 import org.gradle.jvm.toolchain.JavaToolchainService;
 
-import java.util.List;
 import java.util.Map;
 import java.util.function.Supplier;
 
@@ -96,12 +95,8 @@ public class ElasticsearchJavaBasePlugin implements Plugin<Project> {
             // don't even think about passing args with -J-xxx, oracle will ask you to submit a bug report :)
             // fail on all javac warnings.
             // getCompilerArgs() now returns ListProperty<String> in EAP; use the property API to add arguments
-            compileOptions.getCompilerArgs().addAll(
-                "-Werror",
-                "-Xlint:all,-path,-serial,-options,-deprecation,-try,-removal",
-                "-Xdoclint:all",
-                "-Xdoclint:-missing"
-            );
+            compileOptions.getCompilerArgs()
+                .addAll("-Werror", "-Xlint:all,-path,-serial,-options,-deprecation,-try,-removal", "-Xdoclint:all", "-Xdoclint:-missing");
             // setEncoding(String) removed in EAP; use the property API instead
             compileOptions.getEncoding().set("UTF-8");
             // workaround for https://github.com/gradle/gradle/issues/14141

@@ -62,7 +62,8 @@ tasks.named('javaRestTest') {
   // Enable more verbose logging for debugging
   testLogging {
     events = ["passed", "skipped", "failed"]
-    exceptionFormat = "full"
+    // Assigning a String to an enum property is deprecated in EAP; use the enum constant instead
+    exceptionFormat = org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL
     showStandardStreams = false
   }
 }

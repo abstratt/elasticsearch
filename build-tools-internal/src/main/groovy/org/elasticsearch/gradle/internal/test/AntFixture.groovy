@@ -227,7 +227,10 @@ class AntFixture extends AntTask {
     }
 
     /** Adds a task to kill an elasticsearch node with the given pidfile */
-    private TaskProvider<AntFixtureStop> createStopTask() {
+    // Changed from private to protected: in Gradle EAP the constructor is called via the _Decorated
+    // generated subclass, whose invokeMethod dispatch cannot see private methods, causing
+    // "Could not find method createStopTask()" at task instantiation time
+    protected TaskProvider<AntFixtureStop> createStopTask() {
         final AntFixture fixture = this
         TaskProvider<AntFixtureStop> stop = project.tasks.register("${name}#stop", AntFixtureStop)
         stop.configure {
