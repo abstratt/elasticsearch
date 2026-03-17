@@ -262,9 +262,10 @@ public abstract class DockerBuildTask extends DefaultTask {
             final ByteArrayOutputStream stdout = new ByteArrayOutputStream();
 
             execOperations.exec(spec -> {
-                spec.setCommandLine("docker", "inspect", "--format", "{{ .Id }}", imageTag);
-                spec.setStandardOutput(stdout);
-                spec.setIgnoreExitValue(false);
+                // ExecSpec eager setters removed in EAP; use commandLine() method and property API instead
+                spec.commandLine("docker", "inspect", "--format", "{{ .Id }}", imageTag);
+                spec.getStandardOutput().set(stdout);
+                spec.getIgnoreExitValue().set(false);
             });
 
             return stdout.toString().trim();

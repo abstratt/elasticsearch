@@ -20,7 +20,14 @@ dependencies {
  * This is needed for CsvTestsDataLoaderTests to reflect the classpath that CsvTestsDataLoader actually uses when "main" method is executed.
  */
 tasks.named("test").configure {
-  classpath = classpath - (configurations.resolveableCompileOnly - configurations.runtimeClasspath)
+  // ConfigurableFileCollection no longer supports -= in EAP, and all lazy approaches (filter,
+  // replace, setFrom(minus(...))) create a circular self-reference that causes a StackOverflow.
+  // Fix: capture the raw source-path objects via getFrom(), clear the collection, then rebuild it
+  // with the subtraction applied — the rebuilt sources never reference 'classpath' itself.
+  def toExclude = configurations.resolveableCompileOnly.minus(configurations.runtimeClasspath)
+  def originalSources = classpath.getFrom().toList()
+  classpath.setFrom()
+  classpath.from(project.files(originalSources).minus(toExclude))
 }
 
 /**

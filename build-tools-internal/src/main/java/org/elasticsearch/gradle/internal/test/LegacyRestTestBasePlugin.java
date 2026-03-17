@@ -113,7 +113,8 @@ public class LegacyRestTestBasePlugin implements Plugin<Project> {
             .configureEach(t -> t.finalizedBy(project.getTasks().withType(FixtureStop.class)));
 
         project.getTasks().withType(StandaloneRestIntegTestTask.class).configureEach(t -> {
-            t.setMaxParallelForks(1);
+            // setMaxParallelForks(int) removed in EAP; use the property API instead
+            t.getMaxParallelForks().set(1);
             // if this a module or plugin, it may have an associated zip file with it's contents, add that to the test cluster
             project.getPluginManager().withPlugin("elasticsearch.esplugin", plugin -> {
                 if (GradleUtils.isModuleProject(project.getPath())) {

@@ -15,5 +15,6 @@ dependencies {
 
 tasks.named("test").configure {
   // do not enable TRACE_ENABLED
-  systemProperties.remove('es.insecure_network_trace_enabled')
+  // MapProperty no longer has remove() in EAP; filter the resolved map and reset it instead
+  systemProperties.set(systemProperties.get().findAll { k, v -> k != 'es.insecure_network_trace_enabled' })
 }

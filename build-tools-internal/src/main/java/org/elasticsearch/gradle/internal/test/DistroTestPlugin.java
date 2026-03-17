@@ -186,11 +186,14 @@ public class DistroTestPlugin implements Plugin<Project> {
             // Only run tests for the current architecture
             t.onlyIf(t3 -> distribution.getArchitecture() == Architecture.current());
             t.getOutputs().doNotCacheIf("Build cache is disabled for packaging tests", Specs.satisfyAll());
-            t.setMaxParallelForks(1);
+            // setMaxParallelForks(int) removed in EAP; use the property API instead
+            t.getMaxParallelForks().set(1);
             SourceSet testSourceSet = project.getExtensions().getByType(JavaPluginExtension.class).getSourceSets().getByName("test");
-            t.setClasspath(testSourceSet.getRuntimeClasspath());
-            t.setTestClassesDirs(testSourceSet.getOutput().getClassesDirs());
-            t.setWorkingDir(project.getProjectDir());
+            // setClasspath/setTestClassesDirs removed in EAP; use setFrom() on the ConfigurableFileCollection properties
+            t.getClasspath().setFrom(testSourceSet.getRuntimeClasspath());
+            t.getTestClassesDirs().setFrom(testSourceSet.getOutput().getClassesDirs());
+            // setWorkingDir(File) removed in EAP; use the DirectoryProperty API instead
+            t.getWorkingDir().set(project.getProjectDir());
             t.dependsOn(deps);
             configure.execute(t);
         });

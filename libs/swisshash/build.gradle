@@ -26,7 +26,9 @@ dependencies {
 tasks.named('compileJava').configure {
   options.compilerArgs << '--add-modules=jdk.incubator.vector'
   options.compilerArgs << '--add-reads=org.elasticsearch.swisshash=jdk.incubator.vector'
-  options.compilerArgs -= '-Werror'
+  // compilerArgs is now a ListProperty<String> in EAP; -= (minus) is not supported on ListProperty,
+  // so filter the resolved list and reset it to remove -Werror (incubating APIs cause unavoidable warnings)
+  options.compilerArgs.set(options.compilerArgs.get().findAll { it != '-Werror' })
 }
 
 tasks.named('javadoc').configure {

@@ -53,7 +53,8 @@ public class MutedTestPlugin implements Plugin<Project> {
                 }
 
                 // Don't fail when all tests are ignored when running in CI
-                filter.setFailOnNoMatchingTests(buildParams.getCi() == false);
+                // setFailOnNoMatchingTests(boolean) removed in EAP; use the property API instead
+                filter.getFailOnNoMatchingTests().set(buildParams.getCi() == false);
             });
         });
     }

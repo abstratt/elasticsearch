@@ -56,8 +56,9 @@ public class StandaloneRestTestPlugin implements Plugin<Project> {
         final SourceSet testSourceSet = sourceSets.maybeCreate("test");
 
         project.getTasks().withType(Test.class).configureEach(test -> {
-            test.setTestClassesDirs(testSourceSet.getOutput().getClassesDirs());
-            test.setClasspath(testSourceSet.getRuntimeClasspath());
+            // setTestClassesDirs/setClasspath removed in EAP; use setFrom() on the ConfigurableFileCollection properties
+            test.getTestClassesDirs().setFrom(testSourceSet.getOutput().getClassesDirs());
+            test.getClasspath().setFrom(testSourceSet.getRuntimeClasspath());
         });
 
         // create a compileOnly configuration as others might expect it

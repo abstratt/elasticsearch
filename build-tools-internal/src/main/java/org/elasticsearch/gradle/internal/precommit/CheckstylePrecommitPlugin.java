@@ -119,7 +119,8 @@ public class CheckstylePrecommitPlugin extends PrecommitPlugin {
                         sourceSet -> project.getTasks()
                             .withType(Checkstyle.class)
                             .named(sourceSet.getTaskName("checkstyle", null))
-                            .configure(t -> t.setClasspath(project.getObjects().fileCollection()))
+                            // setClasspath(FileCollection) removed in EAP; use setFrom() on the ConfigurableFileCollection property
+                            .configure(t -> t.getClasspath().setFrom(project.getObjects().fileCollection()))
                     )
             );
 
