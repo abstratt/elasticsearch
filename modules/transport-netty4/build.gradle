@@ -76,8 +76,8 @@ TaskProvider<Test> pooledInternalClusterTest = tasks.register("pooledInternalClu
   systemProperty 'es.insecure_network_trace_enabled', 'true'
   SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
   SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
-  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
-  setClasspath(internalTestSourceSet.getRuntimeClasspath())
+  testClassesDirs.setFrom(internalTestSourceSet.getOutput().getClassesDirs())
+  classpath.setFrom(internalTestSourceSet.getRuntimeClasspath())
 }
 
 tasks.named("internalClusterTest").configure {

@@ -673,7 +673,7 @@ subprojects { Project subProject ->
     def compressExportTask = tasks.register(taskName("compress", architecture, base, 'DockerImageExport'), Tar) {
       it.from(project.tarTree(tarFile))
       archiveExtension = 'tar.gz'
-      it.setCompression(Compression.GZIP)
+      it.getCompression().set(Compression.GZIP)
       it.getArchiveBaseName().set("elasticsearch${base.suffix}-${VersionProperties.elasticsearch}-docker-image")
       it.getArchiveVersion().set("")
       it.getArchiveClassifier().set(architecture.dockerClassifier)

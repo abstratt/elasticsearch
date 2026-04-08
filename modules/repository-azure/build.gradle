@@ -324,8 +324,8 @@ if (buildParams.inFipsJvm) {
 tasks.register("azureThirdPartyUnitTest", Test) {
   SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
   SourceSet internalTestSourceSet = sourceSets.getByName(InternalClusterTestPlugin.SOURCE_SET_NAME)
-  setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())
-  setClasspath(internalTestSourceSet.getRuntimeClasspath())
+  testClassesDirs.setFrom(internalTestSourceSet.getOutput().getClassesDirs())
+  classpath.setFrom(internalTestSourceSet.getRuntimeClasspath())
   include '**/AzureStorageCleanupThirdPartyTests.class'
   systemProperty 'test.azure.fixture', Boolean.toString(useFixture)
   systemProperty 'test.azure.account', azureAccount ?: ""

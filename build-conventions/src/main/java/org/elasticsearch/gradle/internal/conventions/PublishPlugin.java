@@ -45,7 +45,6 @@ import org.w3c.dom.Element;
 
 import java.io.File;
 import java.util.Map;
-import java.util.concurrent.Callable;
 
 import javax.inject.Inject;
 
@@ -137,12 +136,11 @@ public class PublishPlugin implements Plugin<Project> {
         var projectVersion = providerFactory.provider(() -> project.getVersion());
         var generateMavenPoms = project.getTasks().withType(GenerateMavenPom.class);
         generateMavenPoms.configureEach(pomTask -> {
-            pomTask.setDestination(
-                (Callable<String>) () -> String.format(
-                    "%s/distributions/%s-%s.pom",
-                    projectLayout.getBuildDirectory().get().getAsFile().getPath(),
-                    archivesBaseName.get(),
-                    projectVersion.get()
+            pomTask.getDestination().set(
+                projectLayout.getBuildDirectory().file(
+                    archivesBaseName.flatMap(name -> projectVersion.map(v ->
+                        "distributions/" + name + "-" + v + ".pom"
+                    ))
                 )
             );
         });
@@ -156,7 +154,7 @@ public class PublishPlugin implements Plugin<Project> {
                 addScmInfo(xml, gitInfo.get());
             });
             // have to defer this until archivesBaseName is set
-            project.afterEvaluate(p -> publication.setArtifactId(archivesBaseName.get()));
+            project.afterEvaluate(p -> publication.getArtifactId().set(archivesBaseName.get()));
             generatePomTask.configure(t -> t.dependsOn(generateMavenPoms));
         });
     }
