@@ -159,7 +159,7 @@ public abstract class LoggedExec extends DefaultTask implements FileSystemOperat
             execSpec.environment(getEnvironment().get());
             execSpec.environment(getNonTrackedEnvironment().get());
             if (getArgs().isPresent()) {
-                execSpec.getArgs().set(getArgs().get());
+                execSpec.args(getArgs().get());
             }
             if (getWorkingDir().isPresent()) {
                 execSpec.getWorkingDir().set(getWorkingDir().get());

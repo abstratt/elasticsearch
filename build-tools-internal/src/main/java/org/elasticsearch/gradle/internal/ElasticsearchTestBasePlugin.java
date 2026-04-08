@@ -138,14 +138,14 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
 
             test.getJvmArgumentProviders().add(new SimpleCommandLineArgumentProvider("-XX:HeapDumpPath=" + heapdumpDir));
             test.getJvmArgumentProviders().add(() -> {
-                if (test.getJavaVersion().compareTo(JavaVersion.VERSION_23) <= 0) {
+                if (test.getJavaVersion().get().compareTo(JavaVersion.VERSION_23) <= 0) {
                     return List.of("-Djava.security.manager=allow");
                 } else {
                     return List.of();
                 }
             });
             test.getJvmArgumentProviders()
-                .add(() -> List.of("-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().getMajorVersion()));
+                .add(() -> List.of("-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().get().getMajorVersion()));
 
             String argline = System.getProperty("tests.jvm.argline");
             if (argline != null) {

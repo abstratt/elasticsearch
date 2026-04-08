@@ -128,6 +128,7 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
                     public void execute(Task task) {
                         List<JavadocOfflineLink> existingJavadocOfflineLinks = ((StandardJavadocDocletOptions) javadoc.getOptions())
                             .getLinksOffline()
+                            .get()
                             .stream()
                             .filter(javadocOfflineLink -> new File(projectDir, javadocOfflineLink.getPackagelistLoc()).exists())
                             .toList();
