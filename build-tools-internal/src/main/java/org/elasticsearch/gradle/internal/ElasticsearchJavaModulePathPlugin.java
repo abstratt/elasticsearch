@@ -97,7 +97,10 @@ public abstract class ElasticsearchJavaModulePathPlugin implements Plugin<Projec
             var argumentProvider = new CompileModulePathArgumentProvider(isModuleProject, moduleCompileClasspath);
             task.getOptions().getCompilerArgumentProviders().add(argumentProvider);
             if (isIdea() == false) {
-                // snapshot the current classpath before replacing to avoid circular reference
+                // Snapshot the current classpath before replacing to avoid circular reference when
+                // calling setFrom. We retain build dependencies via the compileClasspath configuration
+                // since snapshotting via getFiles() breaks the implicit dependency chain.
+                task.dependsOn(compileClasspath);
                 FileCollection trimmedClasspath = project.files(task.getClasspath().getFiles()).minus(moduleCompileClasspath);
                 task.getClasspath().setFrom(trimmedClasspath);
             }
