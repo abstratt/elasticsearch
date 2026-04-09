@@ -35,7 +35,7 @@ public class PomValidationPrecommitPlugin extends PrecommitPlugin {
                     .withType(GenerateMavenPom.class)
                     .named("generatePomFileFor" + publicationName + "Publication");
                 task.dependsOn(generateMavenPom);
-                task.getPomFile().fileProvider(generateMavenPom.map(GenerateMavenPom::getDestination));
+                task.getPomFile().fileProvider(generateMavenPom.flatMap(t -> t.getDestination().map(r -> r.getAsFile())));
             });
         });
 

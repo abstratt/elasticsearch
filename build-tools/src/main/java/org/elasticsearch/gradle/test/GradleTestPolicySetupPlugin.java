@@ -27,7 +27,7 @@ public class GradleTestPolicySetupPlugin implements Plugin<Project> {
             test.systemProperty("tests.task", test.getPath());
 
             test.getJvmArgumentProviders().add(() -> {
-                if (test.getJavaVersion().compareTo(JavaVersion.VERSION_23) <= 0) {
+                if (test.getJavaVersion().get().compareTo(JavaVersion.VERSION_23) <= 0) {
                     return List.of("-Djava.security.manager=allow");
                 } else {
                     return List.of();

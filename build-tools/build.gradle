@@ -92,10 +92,10 @@ gradlePlugin {
 // we update the version property to reflect if we are building a snapshot or a release build
 // we write this back out below to load it in the Build.java which will be shown in rest main action
 // to indicate this being a snapshot build or a release build.
-def generateVersionProperties = tasks.register("generateVersionProperties", WriteProperties) {
+def generateVersionProperties = tasks.register("generateVersionProperties", WriteProperties) { task ->
     destinationFile = new File(buildDir, "version.properties");
     comment = 'Generated version properties'
-    properties(versions)
+    versions.each { k, v -> task.property(k, v) }
 }
 
 tasks.named("processResources").configure {

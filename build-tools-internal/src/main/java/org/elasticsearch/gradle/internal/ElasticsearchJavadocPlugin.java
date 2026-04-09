@@ -20,6 +20,7 @@ import org.gradle.api.artifacts.Dependency;
 import org.gradle.api.artifacts.ProjectDependency;
 import org.gradle.api.plugins.BasePluginExtension;
 import org.gradle.api.plugins.JavaPlugin;
+import org.gradle.api.provider.ListProperty;
 import org.gradle.api.tasks.javadoc.Javadoc;
 import org.gradle.external.javadoc.JavadocOfflineLink;
 import org.gradle.external.javadoc.StandardJavadocDocletOptions;
@@ -43,7 +44,7 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
             // the "value" -quiet is added, separated by a space. This is ok since the javadoc
             // command already adds -quiet, so we are just duplicating it
             // see https://discuss.gradle.org/t/add-custom-javadoc-option-that-does-not-take-an-argument/5959
-            javadoc.getOptions().setEncoding("UTF8");
+            javadoc.getOptions().getEncoding().set("UTF8");
             ((StandardJavadocDocletOptions) javadoc.getOptions()).addStringOption("Xdoclint:all,-missing", "-quiet");
 
             // ensure that modular dependencies can be found on the module path
@@ -100,7 +101,7 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
             project.getTasks().named("javadoc", Javadoc.class).configure(javadoc -> {
                 Javadoc upstreamJavadoc = upstreamProject.getTasks().named("javadoc", Javadoc.class).get();
                 javadoc.setSource(javadoc.getSource().plus(upstreamJavadoc.getSource()));
-                javadoc.setClasspath(javadoc.getClasspath().plus(upstreamJavadoc.getClasspath()));
+                javadoc.getClasspath().from(upstreamJavadoc.getClasspath());
             });
             /*
              * Instead we need the upstream project's javadoc classpath so
@@ -112,30 +113,43 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
                 javadoc.dependsOn(upstreamProject.getPath() + ":javadoc");
                 String externalLinkName = upstreamProject.getExtensions().getByType(BasePluginExtension.class).getArchivesName().get();
                 String artifactPath = dep.getGroup().replace('.', '/') + '/' + externalLinkName.replace('.', '/') + '/' + dep.getVersion();
-                var options = (StandardJavadocDocletOptions) javadoc.getOptions();
-                options.linksOffline(
-                    artifactHost(project) + "/javadoc/" + artifactPath,
-                    project.getProjectDir().toPath().relativize(upstreamProject.getBuildDir().toPath()) + "/docs/javadoc/"
-                );
-                /*
-                 *some dependent javadoc tasks are explicitly skipped. We need to ignore those external links as
-                 * javadoc would fail otherwise.
-                 * Using Action here instead of lambda to keep gradle happy and don't trigger deprecation
-                 */
                 File projectDir = project.getProjectDir();
-                javadoc.doFirst(new Action<Task>() {
-                    @Override
-                    public void execute(Task task) {
-                        List<JavadocOfflineLink> existingJavadocOfflineLinks = ((StandardJavadocDocletOptions) javadoc.getOptions())
-                            .getLinksOffline()
-                            .stream()
-                            .filter(javadocOfflineLink -> new File(projectDir, javadocOfflineLink.getPackagelistLoc()).exists())
-                            .toList();
-                        ((StandardJavadocDocletOptions) javadoc.getOptions()).setLinksOffline(existingJavadocOfflineLinks);
+                String packageListLoc = project.getProjectDir().toPath().relativize(upstreamProject.getBuildDir().toPath()) + "/docs/javadoc/";
 
-                    }
-                });
-
+                /*
+                 * Some dependent javadoc tasks are explicitly skipped. We need to ignore those external links as
+                 * javadoc would fail otherwise. To avoid setting a property at execution time (deprecated in Gradle 10),
+                 * we accumulate links in a separate ListProperty and configure linksOffline lazily with a filtered
+                 * provider that checks directory existence at execution time (when the value is resolved).
+                 */
+                // Accumulate offline links in an extra property so we can set up a single lazy
+                // filtered provider on linksOffline (avoiding property mutation at execution time,
+                // which is deprecated in Gradle 10). The provider is set at configure time but
+                // evaluated at execution time, allowing file-existence checks to be deferred.
+                var ext = javadoc.getExtensions().getExtraProperties();
+                @SuppressWarnings("unchecked")
+                ListProperty<JavadocOfflineLink> pendingLinks = ext.has("pendingOfflineLinks")
+                    ? (ListProperty<JavadocOfflineLink>) ext.get("pendingOfflineLinks")
+                    : null;
+                if (pendingLinks == null) {
+                    // First upstream dependency: create the accumulating list and wire it lazily to linksOffline
+                    pendingLinks = project.getObjects().listProperty(JavadocOfflineLink.class);
+                    ext.set("pendingOfflineLinks", pendingLinks);
+                    // Configure linksOffline as a lazy filtered view of the accumulating list.
+                    // The provider is evaluated at execution time (not configure time), so file existence
+                    // checks are accurate. The .set(provider) call happens at configure time.
+                    final ListProperty<JavadocOfflineLink> links = pendingLinks;
+                    ((StandardJavadocDocletOptions) javadoc.getOptions()).getLinksOffline().set(
+                        project.provider(() -> links.get().stream()
+                            .filter(link -> new File(projectDir, link.getPackagelistLoc()).exists())
+                            .toList()
+                        )
+                    );
+                }
+                pendingLinks.add(new JavadocOfflineLink(
+                    artifactHost(project) + "/javadoc/" + artifactPath,
+                    packageListLoc
+                ));
             });
         }
     }

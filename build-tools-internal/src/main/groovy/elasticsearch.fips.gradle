@@ -80,7 +80,7 @@ if (buildParams.inFipsJvm) {
         // ensure that bouncycastle is on classpath for the all of test types, must happen in evaluateAfter since the rest tests explicitly
         // set the class path to help maintain pure black box testing, and here we are adding to that classpath
         tasks.withType(Test).configureEach { Test test ->
-          test.setClasspath(test.getClasspath().plus(extraFipsJarsConfiguration))
+          test.getClasspath().from(extraFipsJarsConfiguration)
         }
       }
 
