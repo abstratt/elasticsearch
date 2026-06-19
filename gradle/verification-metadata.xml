@@ -4,6 +4,11 @@
       <verify-metadata>false</verify-metadata>
       <verify-signatures>false</verify-signatures>
       <trusted-artifacts>
+         <!-- The Gradle 10 provider-API preview distribution bundles plugin artifacts (e.g.
+              gradle-kotlin-dsl-plugins, kotlin-assignment) that are absent from this checked-in
+              metadata, so resolution would fail verification. Trust all jars for the throwaway preview;
+              revert when migrating against a released Gradle. -->
+         <trust file=".*[.]jar" regex="true"/>
          <trust group="beats" name="filebeat"/>
          <trust group="beats" name="filebeat-fips"/>
          <trust group="beats" name="metricbeat"/>

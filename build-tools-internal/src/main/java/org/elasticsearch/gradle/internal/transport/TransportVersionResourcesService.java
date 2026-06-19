@@ -479,10 +479,10 @@ public abstract class TransportVersionResourcesService implements BuildService<T
         Collections.addAll(command, args);
 
         ExecResult result = getExecOperations().exec(spec -> {
-            spec.setCommandLine(command);
-            spec.setStandardOutput(stdout);
-            spec.setErrorOutput(stdout);
-            spec.setIgnoreExitValue(true);
+            spec.commandLine(command);
+            spec.getStandardOutput().set(stdout);
+            spec.getErrorOutput().set(stdout);
+            spec.getIgnoreExitValue().set(true);
         });
 
         if (result.getExitValue() != 0) {
@@ -545,10 +545,10 @@ public abstract class TransportVersionResourcesService implements BuildService<T
         Collections.addAll(command, "git", "-C", workingDir);
         Collections.addAll(command, args);
         ExecResult result = getExecOperations().exec(spec -> {
-            spec.setCommandLine(command);
-            spec.setStandardOutput(stdout);
-            spec.setErrorOutput(stdout);
-            spec.setIgnoreExitValue(true);
+            spec.commandLine(command);
+            spec.getStandardOutput().set(stdout);
+            spec.getErrorOutput().set(stdout);
+            spec.getIgnoreExitValue().set(true);
         });
         if (result.getExitValue() != 0) {
             return null;

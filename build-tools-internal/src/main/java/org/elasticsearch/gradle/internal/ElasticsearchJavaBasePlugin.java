@@ -96,7 +96,8 @@ public class ElasticsearchJavaBasePlugin implements Plugin<Project> {
             // don't even think about passing args with -J-xxx, oracle will ask you to submit a bug report :)
             // fail on all javac warnings.
             // TODO Discuss moving compileOptions.getCompilerArgs() to use provider api with Gradle team.
-            List<String> compilerArgs = compileOptions.getCompilerArgs();
+            // getCompilerArgs() now returns a ListProperty<String>; add lazily rather than mutating a List.
+            var compilerArgs = compileOptions.getCompilerArgs();
             compilerArgs.add("-Werror");
             int compilerMajor = Integer.parseInt(buildParams.getMinimumRuntimeVersion().getMajorVersion());
             String xlintExclusions = "all,-path,-serial,-options,-deprecation,-try,-removal,-processing";
@@ -106,13 +107,13 @@ public class ElasticsearchJavaBasePlugin implements Plugin<Project> {
             compilerArgs.add("-Xlint:" + xlintExclusions);
             compilerArgs.add("-Xdoclint:all");
             compilerArgs.add("-Xdoclint:-missing");
-            compileOptions.setEncoding("UTF-8");
-            compileOptions.setIncremental(true);
+            compileOptions.getEncoding().set("UTF-8");
+            compileOptions.getIncremental().set(true);
             // workaround for https://github.com/gradle/gradle/issues/14141
             compileTask.getConventionMapping().map("sourceCompatibility", () -> java.getSourceCompatibility().toString());
             compileTask.getConventionMapping().map("targetCompatibility", () -> java.getTargetCompatibility().toString());
             compileOptions.getRelease().set(releaseVersionProviderFromCompileTask(project, compileTask));
-            compileOptions.setIncremental(buildParams.getCi() == false);
+            compileOptions.getIncremental().set(buildParams.getCi() == false);
         });
         // also apply release flag to groovy, which is used in build-tools
         project.getTasks().withType(GroovyCompile.class).configureEach(compileTask -> {

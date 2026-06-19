@@ -93,9 +93,13 @@ tasks.named('zipAggregation').configure {
  *
  * */
 ext.testArtifact = { p, String name = "test" ->
-  p.capabilities {
+  // In this DSL context the argument may resolve to a Project (script owner) rather than a
+  // ProjectDependency; normalize to a project dependency so the capability can be attached.
+  def dep = p instanceof org.gradle.api.Project ? dependencies.project(path: p.path) : p
+  dep.capabilities {
     requireCapabilities("${p.group}:${p.name}-${name}-artifacts")
   };
+  return dep
 }
 
 class StepExpansion {

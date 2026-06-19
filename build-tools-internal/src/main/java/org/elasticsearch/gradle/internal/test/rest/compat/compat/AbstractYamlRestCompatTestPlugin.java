@@ -244,17 +244,17 @@ public abstract class AbstractYamlRestCompatTestPlugin implements Plugin<Project
             testTask.systemProperty("tests.restCompat", true);
             // Use test runner and classpath from "normal" yaml source set
             FileCollection outputFileCollection = yamlCompatTestSourceSet.getOutput();
-            testTask.setTestClassesDirs(
-                yamlTestSourceSet.getOutput().getClassesDirs().plus(yamlCompatTestSourceSet.getOutput().getClassesDirs())
-            );
+            testTask.getTestClassesDirs()
+                .setFrom(yamlTestSourceSet.getOutput().getClassesDirs().plus(yamlCompatTestSourceSet.getOutput().getClassesDirs()));
             testTask.onlyIf("Compatibility tests are available", t -> outputFileCollection.isEmpty() == false);
-            testTask.setClasspath(
-                yamlCompatTestSourceSet.getRuntimeClasspath()
-                    // remove the "normal" api and tests
-                    .minus(project.files(yamlTestSourceSet.getOutput().getResourcesDir()))
-                    .minus(project.files(originalYamlSpecsDir))
-                    .minus(project.files(originalYamlTestsDir))
-            );
+            testTask.getClasspath()
+                .setFrom(
+                    yamlCompatTestSourceSet.getRuntimeClasspath()
+                        // remove the "normal" api and tests
+                        .minus(project.files(yamlTestSourceSet.getOutput().getResourcesDir()))
+                        .minus(project.files(originalYamlSpecsDir))
+                        .minus(project.files(originalYamlTestsDir))
+                );
 
             // run compatibility tests after "normal" tests
             testTask.mustRunAfter(project.getTasks().named(LegacyYamlRestTestPlugin.SOURCE_SET_NAME));

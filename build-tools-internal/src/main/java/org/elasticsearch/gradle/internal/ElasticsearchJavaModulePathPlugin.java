@@ -101,10 +101,15 @@ public abstract class ElasticsearchJavaModulePathPlugin implements Plugin<Projec
         project.getTasks().named("compileJava", JavaCompile.class).configure(task -> {
             var argumentProvider = new CompileModulePathArgumentProvider(isModuleProject, moduleCompileClasspath);
             task.getOptions().getCompilerArgumentProviders().add(argumentProvider);
-            FileCollection classpath = task.getClasspath();
             if (isIdea() == false && task.getClasspath() != null) {
-                FileCollection trimmedClasspath = classpath.minus(moduleCompileClasspath);
-                task.setClasspath(project.files(trimmedClasspath));
+                // setClasspath(files(getClasspath().minus(x))) atomically replaced the classpath with a
+                // snapshot. Rewriting it to setFrom(...) would make the ConfigurableFileCollection contain a
+                // SubtractingFileCollection that references the same collection, recursing infinitely
+                // (StackOverflowError) when resolved. replace() hands the transform the current collection
+                // instead of re-querying the property under construction, which breaks the self-reference.
+                ((org.gradle.api.internal.file.collections.DefaultConfigurableFileCollection) task.getClasspath()).replace(
+                    it -> it.minus(moduleCompileClasspath)
+                );
             }
             task.doLast(new Action<Task>() {
                 @Override
