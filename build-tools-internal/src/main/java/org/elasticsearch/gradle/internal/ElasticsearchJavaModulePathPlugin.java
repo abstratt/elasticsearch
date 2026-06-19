@@ -101,10 +101,14 @@ public abstract class ElasticsearchJavaModulePathPlugin implements Plugin<Projec
         project.getTasks().named("compileJava", JavaCompile.class).configure(task -> {
             var argumentProvider = new CompileModulePathArgumentProvider(isModuleProject, moduleCompileClasspath);
             task.getOptions().getCompilerArgumentProviders().add(argumentProvider);
-            FileCollection classpath = task.getClasspath();
             if (isIdea() == false && task.getClasspath() != null) {
-                FileCollection trimmedClasspath = classpath.minus(moduleCompileClasspath);
-                task.setClasspath(project.files(trimmedClasspath));
+                // getClasspath() is now a live ConfigurableFileCollection. Doing
+                // setClasspath(files(getClasspath().minus(x))) would wire the collection to a
+                // derivation of itself, so resolving it recurses (StackOverflowError). replace()
+                // hands the transform the current value instead of re-querying the property.
+                ((org.gradle.api.internal.file.collections.DefaultConfigurableFileCollection) task.getClasspath()).replace(
+                    current -> current.minus(moduleCompileClasspath)
+                );
             }
             task.doLast(new Action<Task>() {
                 @Override

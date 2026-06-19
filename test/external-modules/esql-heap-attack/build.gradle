@@ -54,7 +54,7 @@ dependencies {
 }
 
 tasks.named('compileJavaRestTestJava').configure {
-  options.compilerArgs << '-Xlint:-classfile'
+  options.compilerArgs.add('-Xlint:-classfile')
 }
 
 tasks.named('javaRestTest') {

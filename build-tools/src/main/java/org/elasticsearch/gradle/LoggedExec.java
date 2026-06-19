@@ -216,7 +216,7 @@ public abstract class LoggedExec extends DefaultTask implements FileSystemOperat
                 spec.setErrorOutput(output);
                 action.execute(spec);
                 try {
-                    output.write(("Output for " + spec.getExecutable() + ":").getBytes(StandardCharsets.UTF_8));
+                    output.write(("Output for " + spec.getExecutable().get() + ":").getBytes(StandardCharsets.UTF_8));
                 } catch (IOException e) {
                     throw new UncheckedIOException(e);
                 }
