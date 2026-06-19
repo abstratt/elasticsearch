@@ -137,14 +137,17 @@ public class PublishPlugin implements Plugin<Project> {
         var projectVersion = providerFactory.provider(() -> project.getVersion());
         var generateMavenPoms = project.getTasks().withType(GenerateMavenPom.class);
         generateMavenPoms.configureEach(pomTask -> {
-            pomTask.setDestination(
-                (Callable<String>) () -> String.format(
-                    "%s/distributions/%s-%s.pom",
-                    projectLayout.getBuildDirectory().get().getAsFile().getPath(),
-                    archivesBaseName.get(),
-                    projectVersion.get()
-                )
-            );
+            // setDestination(Callable) was removed; getDestination() is now a RegularFileProperty.
+            // Wire it lazily off the build directory rather than resolving an absolute path string.
+            pomTask.getDestination()
+                .set(
+                    projectLayout.getBuildDirectory()
+                        .file(
+                            providerFactory.provider(
+                                () -> String.format("distributions/%s-%s.pom", archivesBaseName.get(), projectVersion.get())
+                            )
+                        )
+                );
         });
 
         var publishing = extensions.getByType(PublishingExtension.class);
@@ -156,7 +159,7 @@ public class PublishPlugin implements Plugin<Project> {
                 addScmInfo(xml, gitInfo.get());
             });
             // have to defer this until archivesBaseName is set
-            project.afterEvaluate(p -> publication.setArtifactId(archivesBaseName.get()));
+            project.afterEvaluate(p -> publication.getArtifactId().set(archivesBaseName.get()));
             generatePomTask.configure(t -> t.dependsOn(generateMavenPoms));
         });
     }

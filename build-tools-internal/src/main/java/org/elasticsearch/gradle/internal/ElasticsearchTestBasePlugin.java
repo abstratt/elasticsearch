@@ -104,8 +104,8 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                 public void execute(Task t) {
                     mkdirs(testOutputDir);
                     mkdirs(heapdumpDir);
-                    mkdirs(test.getWorkingDir());
-                    mkdirs(test.getWorkingDir().toPath().resolve("temp").toFile());
+                    mkdirs(test.getWorkingDir().get().getAsFile());
+                    mkdirs(test.getWorkingDir().get().getAsFile().toPath().resolve("temp").toFile());
 
                     // TODO remove once jvm.options are added to test system properties
                     test.systemProperty("java.locale.providers", "CLDR");
@@ -114,8 +114,8 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             test.getJvmArgumentProviders().add(nonInputProperties);
             test.getExtensions().add("nonInputProperties", nonInputProperties);
 
-            test.setWorkingDir(project.file(project.getBuildDir() + "/testrun/" + test.getName().replace("#", "_")));
-            test.setMaxParallelForks(Integer.parseInt(System.getProperty("tests.jvms", buildParams.get().getDefaultParallel().toString())));
+            test.getWorkingDir().set(project.file(project.getBuildDir() + "/testrun/" + test.getName().replace("#", "_")));
+            test.getMaxParallelForks().set(Integer.parseInt(System.getProperty("tests.jvms", buildParams.get().getDefaultParallel().toString())));
 
             test.exclude("**/*$*.class");
 
@@ -144,7 +144,7 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
 
             test.getJvmArgumentProviders().add(new SimpleCommandLineArgumentProvider("-XX:HeapDumpPath=" + heapdumpDir));
             test.getJvmArgumentProviders()
-                .add(() -> List.of("-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().getMajorVersion()));
+                .add(() -> List.of("-Dorg.apache.lucene.vectorization.upperJavaFeatureVersion=" + test.getJavaVersion().get().getMajorVersion()));
 
             String argline = System.getProperty("tests.jvm.argline");
             if (argline != null) {
@@ -158,7 +158,7 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
 
             if (disableAssertions) {
                 System.out.println("disable assertions");
-                test.setEnableAssertions(false);
+                test.getEnableAssertions().set(false);
             }
             Map<String, String> sysprops = Map.of("java.awt.headless", "true", "tests.artifact", project.getName(), "jna.nosys", "true");
             test.systemProperties(sysprops);
@@ -177,10 +177,10 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             nonInputProperties.systemProperty("gradle.user.home", gradleUserHome);
             nonInputProperties.systemProperty("workspace.dir", Util.locateElasticsearchWorkspace(project.getGradle()));
             // we use 'temp' relative to CWD since this is per JVM and tests are forbidden from writing to CWD
-            nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().toPath().resolve("temp"));
+            nonInputProperties.systemProperty("java.io.tmpdir", test.getWorkingDir().get().getAsFile().toPath().resolve("temp"));
             if (test.getName().equals("internalClusterTest")) {
                 // configure a node home directory independent of the Java temp dir so that entitlements can be properly enforced
-                nonInputProperties.systemProperty("tempDir", test.getWorkingDir().toPath().resolve("nodesTemp"));
+                nonInputProperties.systemProperty("tempDir", test.getWorkingDir().get().getAsFile().toPath().resolve("nodesTemp"));
             }
 
             SourceSetContainer sourceSets = project.getExtensions().getByType(SourceSetContainer.class);
@@ -248,7 +248,7 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
                     FileCollection shadowJar = project.files(project.getTasks().named("shadowJar"));
                     FileCollection mainRuntime = mainSourceSet.getRuntimeClasspath();
                     FileCollection testRuntime = testSourceSet.getRuntimeClasspath();
-                    test.setClasspath(testRuntime.minus(mainRuntime).plus(shadowConfig).plus(shadowJar));
+                    test.getClasspath().setFrom(testRuntime.minus(mainRuntime).plus(shadowConfig).plus(shadowJar));
                 }
             });
         });

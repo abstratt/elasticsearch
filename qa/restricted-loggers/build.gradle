@@ -15,5 +15,6 @@ dependencies {
 
 tasks.named("test").configure {
   // do not enable TRACE_ENABLED
-  systemProperties.remove('es.insecure_network_trace_enabled')
+  // systemProperties is now a MapProperty with no remove(); resolve-and-reset without the key
+  systemProperties.set(systemProperties.get().findAll { it.key != 'es.insecure_network_trace_enabled' })
 }

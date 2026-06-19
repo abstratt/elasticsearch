@@ -187,7 +187,7 @@ public class DistributionDownloadPlugin implements Plugin<Project> {
     private static void addIvyRepo(Project project, String name, String url, String group) {
         IvyArtifactRepository ivyRepo = project.getRepositories().ivy(repo -> {
             repo.setName(name);
-            repo.setUrl(url);
+            repo.getUrl().set(url);
             repo.metadataSources(IvyArtifactRepository.MetadataSources::artifact);
             repo.patternLayout(layout -> layout.artifact("/downloads/elasticsearch/[module]-[revision](-[classifier]).[ext]"));
         });

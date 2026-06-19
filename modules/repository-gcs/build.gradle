@@ -295,10 +295,11 @@ tasks.named("test").configure {
 }
 
 def gcsAdcTest = tasks.register("gcsAdcTest", Test) {
-  setTestClassesDirs(sourceSets.test.output.classesDirs)
-  setClasspath(sourceSets.test.runtimeClasspath)
+  testClassesDirs.setFrom(sourceSets.test.output.classesDirs)
+  classpath.setFrom(sourceSets.test.runtimeClasspath)
   include '**/GoogleCloudStorageAdcTests.class'
-  environment.remove('GOOGLE_APPLICATION_CREDENTIALS')
+  // environment is now a MapProperty with no remove(); resolve-and-reset without the key
+  environment.set(environment.get().findAll { it.key != 'GOOGLE_APPLICATION_CREDENTIALS' })
 }
 
 tasks.named('check') {

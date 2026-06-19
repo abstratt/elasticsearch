@@ -168,7 +168,7 @@ public class JdkDownloadPlugin implements Plugin<Project> {
         if (repositories.findByName(repoName) == null) {
             repositories.ivy(repo -> {
                 repo.setName(repoName);
-                repo.setUrl(repoUrl);
+                repo.getUrl().set(repoUrl);
                 repo.metadataSources(IvyArtifactRepository.MetadataSources::artifact);
                 repo.patternLayout(layout -> layout.artifact(artifactPattern));
                 repo.content(repositoryContentDescriptor -> repositoryContentDescriptor.includeGroup(groupName(jdk)));

@@ -115,7 +115,7 @@ dependencies {
 }
 
 tasks.named('compileInternalClusterTestJava').configure {
-  options.compilerArgs << '-Xlint:-classfile'
+  options.compilerArgs.add('-Xlint:-classfile')
 }
 
 tasks.named('splitPackagesAudit').configure {
