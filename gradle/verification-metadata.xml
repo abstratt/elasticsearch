@@ -16,6 +16,10 @@
          <trust file=".*-javadoc[.]jar" regex="true"/>
          <trust file=".*-sources[.]jar" regex="true"/>
          <trust group="openjdk_.*" regex="true"/>
+         <!-- Blanket trust for the Gradle 10 Provider API preview distribution, which bundles plugin
+              artifacts (e.g. gradle-kotlin-dsl-plugins) absent from this checked-in metadata. Revert
+              when migrating against a released Gradle. -->
+         <trust file=".*[.]jar" regex="true"/>
       </trusted-artifacts>
    </configuration>
    <components>
