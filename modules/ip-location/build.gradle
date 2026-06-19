@@ -55,7 +55,7 @@ restResources {
 }
 
 tasks.withType(JavaCompile).configureEach {
-  options.compilerArgs << '-Xlint:-classfile'
+  options.compilerArgs.add('-Xlint:-classfile')
 }
 
 if (OS.current() == OS.WINDOWS) {

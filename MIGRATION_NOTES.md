@@ -1,0 +1,910 @@
+# Migration Notes — Provider API (g951-to-PAPI-20260609)
+
+Curated review of every site flagged by `scan_usages.py` after the data-driven rewrites were
+applied. Each residual hit below was reviewed against the receiver type and judged a false positive
+(or, for Category E, a real but deferred site). Confirmed/real rewrites have already been applied to
+the source tree and are summarized first.
+
+## Rewrites applied (done, not deferred)
+
+- **Cat-A `AbstractArchiveTask.preserveFileTimestamps`** — `SymbolicLinkPreservingTar.java:53`: `isPreserveFileTimestamps()` -> `getPreserveFileTimestamps().get()`.
+- **Cat-B `Tar.compression`** — `SymbolicLinkPreservingTar.java:48`: `switch (getCompression())` -> `switch (getCompression().get())`.
+- **Cat-B `Test.javaVersion` (read-only Provider)** — `ElasticsearchTestBasePlugin.java:147`: `test.getJavaVersion().getMajorVersion()` -> `...get().getMajorVersion()`.
+- **Cat-B `ProcessForkOptions.executable`** — `LoggedExec.java:219`: `spec.getExecutable()` -> `spec.getExecutable().get()` in string concatenation.
+- **Cat-B `StandardJavadocDocletOptions.linksOffline`** — `ElasticsearchJavadocPlugin.java:130`: inserted `.get()` before `.stream()`.
+- **Cat-B `CompileOptions.compilerArgs`** — `ElasticsearchJavaBasePlugin.java:99`: declared the local as the lazy `ListProperty<String>` (`var`) and kept the `.add(...)` mutations.
+- **Cat-C `CompileOptions.compilerArgs` (Groovy `<<`)** — rewritten `options.compilerArgs << x` -> `options.compilerArgs.add(x)` in: `libs/simdvec/build.gradle` (33,34,39), `libs/swisshash/build.gradle` (27,28,33), `modules/ip-location/build.gradle` (58), `test/external-modules/esql-heap-attack/build.gradle` (57), `x-pack/plugin/esql-datasource-orc/build.gradle` (21), `x-pack/plugin/esql-datasource-parquet/build.gradle` (21), `x-pack/plugin/esql/build.gradle` (118).
+
+---
+
+## Residual false positives, reviewed
+
+### Cat-A — removed `is*` accessors on non-Gradle receivers
+`isEnabled(...)` is a private plugin method, and `isDebug()` is on `org.gradle.testkit.runner.GradleRunner` (TestKit), not `CompileOptions.debug`.
+
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/test/rest/compat/compat/AbstractYamlRestCompatTestPlugin.java:288` — `onlyIf("BWC tests disabled", t -> isEnabled(extraProperties))` — `isEnabled` is a private method of the plugin class, not BuildCache/JacocoTaskExtension.enabled.
+- `build-tools/src/testFixtures/java/org/elasticsearch/gradle/internal/test/BuildConfigurationAwareGradleRunner.java:120` — `delegate.isDebug()` where `delegate` is an org.gradle.testkit.runner.GradleRunner, not CompileOptions.debug.
+- `build-tools/src/testFixtures/java/org/elasticsearch/gradle/internal/test/InternalAwareGradleRunner.java:106` — `delegate.isDebug()` where `delegate` is an org.gradle.testkit.runner.GradleRunner, not CompileOptions.debug.
+- `build-tools/src/testFixtures/java/org/elasticsearch/gradle/internal/test/NormalizeOutputGradleRunner.java:109` — `delegate.isDebug()` where `delegate` is an org.gradle.testkit.runner.GradleRunner, not CompileOptions.debug.
+
+### Cat-C — Groovy operator mutations on non-lazy receivers
+`excludes << '...'` targets `LicenseHeadersTask.getExcludes()` (build-conventions custom task) which returns a plain `java.util.List<String>` — `<<` is ordinary Groovy list append, preserved per the operator-preservation rule. `arguments += [...]` mutates a local `def arguments` Groovy list inside the `analyzePromqlQueries` JavaExec closure, not `AntlrTask.arguments`.
+
+- `build-tools-internal/build.gradle:273` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/precommit/LicenseHeadersPrecommitPluginFuncTest.groovy:54` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `server/build.gradle:294` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `server/build.gradle:296` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `server/build.gradle:297` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `x-pack/plugin/esql/build.gradle:633` — local `def arguments` Groovy list (JavaExec closure), not AntlrTask.arguments.
+- `x-pack/plugin/esql/build.gradle:636` — local `def arguments` Groovy list (JavaExec closure), not AntlrTask.arguments.
+- `x-pack/plugin/otel-data/build.gradle:170` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `x-pack/plugin/otel-data/build.gradle:171` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+- `x-pack/plugin/prometheus/build.gradle:85` — `LicenseHeadersTask.getExcludes()` returns a plain List<String>; `<<` is Groovy list append.
+
+### Cat-D — assignments that are source-compatible or local
+
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaModulePathPlugin.java:104` — `FileCollection classpath = task.getClasspath()` — getClasspath() now returns ConfigurableFileCollection (a FileCollection subtype); assignment stays valid.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/NativeImageBuildTask.java:173` — `List<String> args = new ArrayList<>()` is a local variable declaration, not ExecSpec.args.
+
+### Cat-E — real `MapProperty.remove(...)`, deferred to task 07/08
+`Test.getEnvironment()` and `Test.getSystemProperties()` now return `MapProperty<String,Object>`, which has no `remove(key)`. Both calls live in `Test`-task configuration closures that are realized only when those specific test tasks run — outside the `help`/`assemble` verification path of this migration — and there is no mechanical lazy equivalent for keyed removal. Left as-is; revisit if task 07/08 surfaces them.
+
+- `modules/repository-gcs/build.gradle:301` — `environment.remove('GOOGLE_APPLICATION_CREDENTIALS')` on Test.getEnvironment() (MapProperty); realized only when the test task runs.
+- `qa/restricted-loggers/build.gradle:18` — `systemProperties.remove('es.insecure_network_trace_enabled')` on Test.getSystemProperties() (MapProperty); realized only when the test task runs.
+
+### Cat-B — CONFIRMED hits that are source-compatible or wrong-receiver
+These matched a migrated type at the receiver but need no change: file_collection getters now return `ConfigurableFileCollection` (a `FileCollection` subtype), `destinationDirectory` is an unchanged `DirectoryProperty`, and the `version`/`source`/`standardOutput` matches are on `Project`/`SourceTask`/`ExecOutput` rather than the migrated property.
+
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/PublishPlugin.java:137` — `project.getVersion()` returns Object on org.gradle.api.Project — not the migrated MavenPublication.version.
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/info/ParallelDetector.java:79` — `providers.exec(...).getStandardOutput()` is an org.gradle.process.ExecOutput (already lazy: .getAsText().get()), not BaseExecSpec.standardOutput.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaBasePlugin.java:100` — Intentional: compilerArgs is kept as the lazy ListProperty<String> and mutated via add(...). The getter is flagged only because it is not immediately suffixed with .get().
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaModulePathPlugin.java:104` — AbstractCompile.getClasspath() now returns ConfigurableFileCollection, a FileCollection subtype — the existing FileCollection assignment stays valid; a file collection has no .get().
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaModulePathPlugin.java:105` — AbstractCompile.getClasspath() returns a ConfigurableFileCollection; the `!= null` check is source-compatible.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaModulePathPlugin.java:118` — AbstractCompile.getClasspath().getAsPath() — getAsPath() is a FileCollection method, preserved by the ConfigurableFileCollection subtype.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:53` — Javadoc.getClasspath().getFiles() — ConfigurableFileCollection subtype keeps getFiles() valid.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:102` — javadoc.getSource()/setSource() are org.gradle.api.tasks.SourceTask members (FileTree), not MinimalJavadocOptions.source.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:102` — javadoc.getSource()/setSource() are org.gradle.api.tasks.SourceTask members (FileTree), not MinimalJavadocOptions.source.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:103` — Javadoc.classpath getter is ConfigurableFileCollection and setClasspath(FileCollection) is not removed; .plus(...) returns a FileCollection that setClasspath accepts.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:103` — Javadoc.classpath getter is ConfigurableFileCollection and setClasspath(FileCollection) is not removed; .plus(...) returns a FileCollection that setClasspath accepts.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:114` — `dep.getVersion()` on a resolved dependency identifier, not a migrated *.version property.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:130` — FIXED — rewritten to getLinksOffline().get().stream(); the .get() is on the next line, so the line-based scanner still reports line 130.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java:145` — `project.getVersion().toString()` on org.gradle.api.Project (Object), not a migrated version property.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/MrjarPlugin.java:177` — AbstractCompile.getDestinationDirectory() return type is unchanged (DirectoryProperty); .getAsFile().get() is already correct lazy usage.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/foreign/ForeignLibraryPlugin.java:145` — AbstractCompile.getDestinationDirectory().file(...) — unchanged DirectoryProperty, used lazily inside flatMap.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/foreign/ForeignLibraryPlugin.java:146` — AbstractCompile.getDestinationDirectory().file(...) — unchanged DirectoryProperty, used lazily inside flatMap.
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/foreign/ForeignLibraryPlugin.java:157` — AbstractCompile.getDestinationDirectory().file(...) — unchanged DirectoryProperty, used lazily inside flatMap.
+
+### Cat-B — unconfirmed getter-name collisions (false positives)
+The scanner flags a `getX()` whenever the file imports some `org.gradle` type and `X` matches a migrated
+property on *any* type. The high-frequency names here collide with rarely-used properties on obscure
+types while the actual receivers are core, non-lazy objects:
+
+- `getName()` -> `IvyArtifact.name`; actual receivers are `Project`/`Task`/`Configuration`/`java.io.File`/dependency.
+- `getPath()` -> `EarModule.path`; actual receivers are `Project`/`Task`/`File`.
+- `getVersion()` -> `MavenPublication`/`StandardJavadocDocletOptions`/`DeploymentDescriptor`; actual receivers are `Project` and resolved dependencies.
+- `getConfigurations()` -> `AbstractDependencyReportTask.configurations`; actual receiver is `Project` (ConfigurationContainer).
+- `getParameters()` -> `GroovyCompileOptions.parameters`; actual receivers are `ValueSource`/`WorkAction` parameter objects.
+- `getOutput()` -> `JacocoTaskExtension.output`; actual receivers are `SourceSetOutput`/process output.
+- `getType()` -> `IvyArtifact`/`InitBuild`; `getRootDir()` -> `VersionControl*`; `getFile()`/`getSource()`/`getClasspath()` -> file-collection subtypes; etc.
+
+Any of these that is in fact a real migrated-type receiver reached via a method chain would surface as a
+compile error in task 07/08 (`help`/`assemble`); none is statically confirmable here. Full inventory of
+flagged files and lines (receiver visible in each snippet):
+
+- `build-conventions/build.gradle`
+    - L91: `eclipse.getClasspath().getFile().whenMerged { classpath ->`
+    - L91: `eclipse.getClasspath().getFile().whenMerged { classpath ->`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/GitInfoPlugin.java`
+    - L38: `getGitInfo().convention(factory.of(GitInfoValueSource.class, spec -> {`
+    - L39: `revision = getGitInfo().map(info -> info.getRevision() == null ? info.`
+    - L39: `revision = getGitInfo().map(info -> info.getRevision() == null ? info.`
+    - L43: `File rootDir = project.getRootDir();`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/LicensingPlugin.java`
+    - L36: `Provider<String> revision = project.getRootProject().getPlugins().appl`
+    - L38: `() -> isSnapshotVersion(project) ? revision.get() : "v" + project.getV`
+    - L70: `return project.getVersion().toString().endsWith("-SNAPSHOT");`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/PublishPlugin.java`
+    - L143: `projectLayout.getBuildDirectory().get().getAsFile().getPath(),`
+    - L165: `var name = project.getName();`
+    - L166: `var description = providerFactory.provider(() -> project.getDescriptio`
+    - L166: `var description = providerFactory.provider(() -> project.getDescriptio`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/VersionPropertiesBuildService.java`
+    - L31: `File infoPath = getParameters().getInfoPath().getAsFile().get();`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/VersionPropertiesPlugin.java`
+    - L31: `spec.getParameters().getInfoPath().set(infoPath);`
+    - L33: `project.getExtensions().add(VERSIONS_EXT, serviceProvider.get().getPro`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/info/GitInfo.java`
+    - L120: `String foundRefs = Arrays.stream(refsDir.listFiles()).map(f -> f.getNa`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/info/GitInfoValueSource.java`
+    - L15: `File path = getParameters().getPath().get();`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/FormattingPrecommitPlugin.java`
+    - L57: `project.getConfigurations().matching(it -> it.getName().startsWith("sp`
+    - L57: `project.getConfigurations().matching(it -> it.getName().startsWith("sp`
+    - L59: `constraints.add(conf.getName(), "org.eclipse.jdt:org.eclipse.jdt.core:`
+    - L64: `constraints.add(conf.getName(), "org.eclipse.jdt:ecj:3.42.0", dependen`
+    - L94: `if (Boolean.getBoolean("BUILD_PERFORMANCE_TEST") && project.getPath().`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/LicenseHeadersPrecommitPlugin.java`
+    - L33: `final SourceSetContainer sourceSets = project.getExtensions().getByTyp`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/LicenseHeadersTask.java`
+    - L239: `throw new GradleException("Cannot generate license header report for "`
+    - L249: `for (File f : dirSet.getAsFileTree().matching(patternFilterable -> pat`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/PomValidationPrecommitPlugin.java`
+    - L29: `String publicationName = GUtils.capitalize(publication.getName());`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/PomValidationTask.java`
+    - L63: `validateString("groupId", model.getGroupId());`
+    - L64: `validateString("artifactId", model.getArtifactId());`
+    - L65: `validateString("version", model.getVersion());`
+    - L66: `validateString("name", model.getName());`
+    - L67: `validateString("description", model.getDescription());`
+    - L68: `validateString("url", model.getUrl());`
+    - L71: `validateString("licenses.name", v.getName());`
+    - L72: `validateString("licenses.url", v.getUrl());`
+    - L76: `validateString("developers.name", v.getName());`
+    - L77: `validateString("developers.url", v.getUrl());`
+    - L80: `validateNonNull("scm", model.getScm(), () -> validateString("scm.url",`
+    - L84: `throw new GradleException("Check failed for task '" + getPath() + "', `
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/PrecommitPlugin.java`
+    - L33: `project.getExtensions().getByType(JavaPluginExtension.class).getSource`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/PrecommitTask.java`
+    - L26: `return new File(getProjectLayout().getBuildDirectory().getAsFile().get`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/precommit/PrecommitTaskPlugin.java`
+    - L37: `project.getExtensions().getByType(JavaPluginExtension.class).getSource`
+- `build-conventions/src/main/java/org/elasticsearch/gradle/internal/conventions/util/Util.java`
+    - L121: `return project.getExtensions().getByType(JavaPluginExtension.class).ge`
+    - L127: `return gradle.getRootProject().getRootDir();`
+    - L133: `if (gradle.getRootProject().getName().startsWith("build-tools")) {`
+    - L134: `File buildToolsParent = gradle.getRootProject().getRootDir().getParent`
+    - L149: `return gradle.getRootProject().getRootDir();`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/fixtures/AbstractGradleInternalPluginFuncTest.groovy`
+    - L42: `import ${getPluginClassUnderTest().getName()}`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/BuildPluginFuncTest.groovy`
+    - L112: `assertOutputContains(result.getOutput(), "build plugin can be applied"`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/SymbolicLinkPreservingTarFuncTest.groovy`
+    - L138: `if (entry.getName().equals("real-folder/")) {`
+    - L141: `} else if (entry.getName().equals("real-folder/file")) {`
+    - L144: `} else if (entry.getName().equals("real-folder/link-to-file")) {`
+    - L148: `} else if (entry.getName().equals("config/")) {`
+    - L151: `} else if (entry.getName().equals("config/sub/")) {`
+    - L154: `} else if (entry.getName().equals("link-in-folder/")) {`
+    - L157: `} else if (entry.getName().equals("link-in-folder/link-to-file")) {`
+    - L161: `} else if (entry.getName().equals("link-to-real-folder")) {`
+    - L166: `throw new GradleException("unexpected entry [" + entry.getName() + "]"`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/precommit/ForbiddenPatternsPrecommitPluginFuncTest.groovy`
+    - L31: `assertOutputContains(result.getOutput(), "invalid pattern")`
+    - L32: `assertOutputContains(result.getOutput(), "Problems report is available`
+    - L52: `assertOutputContains(result.getOutput(), "invalid pattern")`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/precommit/LicenseHeadersPrecommitPluginFuncTest.groovy`
+    - L117: `public class ${sourceFile.getName() - ".java"} {`
+    - L131: `public class ${sourceFile.getName() - ".java"} {`
+    - L169: `String normalizedPath = normalized(sourceFile.getPath())`
+    - L170: `(normalizedPath.substring(normalizedPath.indexOf("src/main/java")) - "`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/precommit/TestingConventionsPrecommitPluginFuncTest.groovy`
+    - L106: `assertOutputContains(result.getOutput(), """\`
+    - L149: `assertOutputContains(result.getOutput(), """\`
+    - L215: `assertOutputContains(result.getOutput(), """\`
+    - L260: `assertOutputContains(result.getOutput(), """\`
+- `build-tools-internal/src/integTest/groovy/org/elasticsearch/gradle/internal/precommit/ThirdPartyAuditPrecommitPluginFuncTest.groovy`
+    - L98: `def output = normalized(result.getOutput())`
+    - L103: `ERROR:   in org.acme.TestingIO (method declaration of 'getFile()')`
+    - L140: `def output = normalized(result.getOutput())`
+    - L184: `def output = normalized(result.getOutput())`
+- `build-tools-internal/src/main/groovy/elasticsearch.base.gradle`
+    - L12: `project.setDescription("Elasticsearch subproject " + project.getPath()`
+- `build-tools-internal/src/main/groovy/elasticsearch.bc-upgrade-test.gradle`
+    - L15: `if (allTasks.hasTask(getPath())) {`
+- `build-tools-internal/src/main/groovy/elasticsearch.fips.gradle`
+    - L87: `test.setClasspath(test.getClasspath().plus(extraFipsJarsConfiguration)`
+- `build-tools-internal/src/main/groovy/elasticsearch.ide.gradle`
+    - L89: `Paths.get(new File(checkstyleConfig).getPath()),`
+    - L90: `Paths.get(new File(checkstyleIdeConfig).getPath()),`
+    - L308: `return Pair.of(gradle.getRootProject().getRootDir(), null)`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/BaseInternalPluginBuildPlugin.java`
+    - L45: `project.getConfigurations().getByName("compileOnly").getDependencies()`
+    - L46: `project.getConfigurations().getByName("testImplementation").getDepende`
+    - L63: `.filter(p -> p.getPath().equals(project1.getPath() + ":qa"))`
+    - L63: `.filter(p -> p.getPath().equals(project1.getPath() + ":qa"))`
+    - L67: `.forEach(p -> checkTaskProvider.configure(task -> task.dependsOn(p.get`
+    - L78: `boolean isModule = GradleUtils.isModuleProject(project.getPath());`
+    - L79: `boolean isXPackModule = isModule && project.getPath().startsWith(":x-p`
+    - L94: `s.include(licenseFile.getName());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/BuildPlugin.java`
+    - L94: `from.include(licenseFile.getName());`
+    - L98: `from.include(noticeFile.getName());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/BwcSetupExtension.java`
+    - L113: `spec.getParameters().getVersion().set(unreleasedVersionInfo.map(it -> `
+    - L114: `spec.getParameters().getCheckoutDir().set(checkoutDir);`
+    - L134: `loggedExec.args("-g", project.getGradle().getGradleUserHomeDir().getAb`
+    - L230: `new File(getParameters().getCheckoutDir().get(), minimumCompilerVersio`
+    - L230: `new File(getParameters().getCheckoutDir().get(), minimumCompilerVersio`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ConcatFilesTask.java`
+    - L89: `getTarget().getParentFile().mkdirs();`
+    - L90: `Files.writeString(getTarget().toPath(), getHeaderLine() + '\n');`
+    - L101: `getTarget().toPath(),`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/DependenciesInfoPlugin.java`
+    - L31: `var runtimeConfiguration = project.getConfigurations().getByName(JavaP`
+    - L35: `var compileOnlyConfiguration = project.getConfigurations()`
+    - L40: `Configuration dependenciesInfoFilesConfiguration = project.getConfigur`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/DependenciesInfoTask.java`
+    - L99: `.map(r -> r.getId())`
+    - L153: `.map(id -> id.getModuleIdentifier().getGroup() + ":" + id.getModuleIde`
+    - L153: `.map(id -> id.getModuleIdentifier().getGroup() + ":" + id.getModuleIde`
+    - L160: `String moduleName = dep.getModuleIdentifier().getName();`
+    - L161: `if (compileOnlyIds.contains(dep.getGroup() + ":" + moduleName + ":" + `
+    - L170: `final String url = createURL(dep.getGroup(), moduleName, dep.getVersio`
+    - L174: `output.append(dep.getGroup() + ":" + moduleName + "," + dep.getVersion`
+    - L242: `String prefix = file.getName().split("-" + infoFileSuffix + ".*")[0];`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/DraSnapshotBuildIdValueSource.java`
+    - L100: `String mode = getParameters().getMode().getOrElse("gradle");`
+    - L105: `String version = getParameters().getVersion().get();`
+    - L106: `String branch = getParameters().getBranch().get();`
+    - L107: `String baseUrl = getParameters().getBaseUrl().get();`
+    - L111: `String hashOverride = getParameters().getHashOverride().getOrElse("");`
+    - L131: `getParameters().getRootProjectDir().get(),`
+    - L132: `getParameters().getRemote().get()`
+    - L135: `logger.debug("DRA snapshot resolution failed for version [{}]: {}", ge`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchBuildCompletePlugin.java`
+    - L79: `File daemonsLogDir = new File(target.getGradle().getGradleUserHomeDir(`
+    - L83: `spec.getParameters().getBuildScan().set(extension);`
+    - L84: `spec.getParameters().getUploadFile().set(targetFile);`
+    - L85: `spec.getParameters().getProjectDir().set(projectDir);`
+    - L86: `spec.getParameters().getFilteredFiles().addAll(getFlowProviders().getB`
+    - L213: `String uploadFilePath = uploadFile.getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaBasePlugin.java`
+    - L135: `Configuration nativeConfig = project.getConfigurations().create("nativ`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaModulePathPlugin.java`
+    - L77: `var configurations = project.getConfigurations();`
+    - L95: `ComponentIdentifier id = root.getId();`
+    - L116: `task.getPath(),`
+    - L139: `boolean added = visited.add(it.getId());`
+    - L144: `|| (it.getId() instanceof ProjectComponentIdentifier projectId`
+    - L147: `.flatMap(it -> Stream.concat(walkResolvedComponent(currentBuildPath, p`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavaPlugin.java`
+    - L77: `Configuration compileOnlyConfig = project.getConfigurations().getByNam`
+    - L78: `Configuration testImplementationConfig = project.getConfigurations().g`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchJavadocPlugin.java`
+    - L61: `var compileClasspath = project.getConfigurations().getByName("compileC`
+    - L63: `var copiedCompileClasspath = project.getConfigurations().create("copie`
+    - L66: `var shadowConfiguration = project.getConfigurations().getByName("shado`
+    - L90: `Project upstreamProject = project.project(dep.getPath());`
+    - L99: `project.evaluationDependsOn(upstreamProject.getPath());`
+    - L112: `javadoc.dependsOn(upstreamProject.getPath() + ":javadoc");`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ElasticsearchTestBasePlugin.java`
+    - L117: `test.setWorkingDir(project.file(project.getBuildDir() + "/testrun/" + `
+    - L146: `test.getJvmArgumentProviders()`
+    - L163: `Map<String, String> sysprops = Map.of("java.awt.headless", "true", "te`
+    - L181: `if (test.getName().equals("internalClusterTest")) {`
+    - L191: `if (TEST_TASKS_WITH_ENTITLEMENTS.contains(test.getName()) && mainSourc`
+    - L194: `FileCollection internalClusterTestRuntime = ("internalClusterTest".equ`
+    - L243: `if (test.getName().equals(JavaPlugin.TEST_TASK_NAME)) {`
+    - L246: `Configuration shadowConfig = project.getConfigurations().getByName(Sha`
+    - L265: `FileCollection patchedImmutableCollections = test.getName().equals("te`
+    - L271: `FileCollection entitlementBridge = TEST_TASKS_WITH_ENTITLEMENTS.contai`
+    - L299: `FileCollection patchedFileCollection = project.getConfigurations()`
+    - L307: `return project.getConfigurations().findByName("entitlementBridge");`
+    - L317: `Configuration agentConfig = project.getConfigurations().create("entitl`
+    - L326: `Configuration bridgeConfig = project.getConfigurations().create("entit`
+    - L337: `.matching(test -> TEST_TASKS_WITH_ENTITLEMENTS.contains(test.getName()`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/EmbeddedProviderExtension.java`
+    - L37: `String projectName = implProject.getName();`
+    - L40: `Configuration implConfig = project.getConfigurations().detachedConfigu`
+    - L67: `mainSourceSet.getOutput().dir(generateProviderImpl);`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalBwcGitPlugin.java`
+    - L86: `findRemote.doLast(t -> System.setProperty("remoteExists", String.value`
+    - L90: `String rootProjectName = project.getRootProject().getName();`
+    - L133: `String projectPath = project.getPath();`
+    - L159: `String checkoutHash = GitInfo.gitInfo(checkoutDir).getRevision();`
+    - L167: `project.getConfigurations().create(checkoutConfiguration);`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalDistributionArchiveCheckPlugin.java`
+    - L52: `String buildTaskName = calculateBuildTask(project.getName());`
+    - L75: `String projectName = project.getName();`
+    - L92: `if (project.getName().contains("tar")) {`
+    - L95: `if (project.getName().contains("zip") == false) {`
+    - L155: `String projectName = project.getName();`
+    - L182: `if (project.getName().contains("tar")) {`
+    - L189: `t.eachFile(fileCopyDetails -> assertNoClassFile(fileCopyDetails.getFil`
+    - L212: `if (file.getName().endsWith(".class")) {`
+    - L213: `throw new GradleException("Detected class file in distribution ('" + f`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalDistributionArchiveSetupPlugin.java`
+    - L73: `var subProjectName = archiveToSubprojectName(distributionArchive.getNa`
+    - L78: `var extractedConfiguration = sub.getConfigurations().create(EXTRACTED_`
+    - L85: `var compositeConfiguration = sub.getConfigurations().create(COMPOSITE_`
+    - L112: `String subdir = archiveTaskToSubprojectName(t.getName());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalDistributionBwcSetupPlugin.java`
+    - L195: `spec.getParameters().getVersion().set(versionInfoProvider.map(info -> `
+    - L197: `spec.getParameters().getBranch().set(branch);`
+    - L198: `spec.getParameters().getRootProjectDir().set(project.getRootProject().`
+    - L199: `spec.getParameters().getRemote().set(remote);`
+    - L200: `spec.getParameters().getMode().set(providerFactory.systemProperty("tes`
+    - L203: `spec.getParameters()`
+    - L206: `spec.getParameters().getBaseUrl().set(draBaseUrl);`
+    - L221: `String projectName = project.getName();`
+    - L296: `+ stableApiProject.getName()`
+    - L304: `String stableMavenModule = "elasticsearch-" + stableApiProject.getName`
+    - L305: `String stableMavenGroup = stableApiProject.getName().startsWith("plugi`
+    - L311: `stableApiProject.getName(),`
+    - L312: `"libs/" + stableApiProject.getName(),`
+    - L355: `bwcProject.getConfigurations().create(expandedDistConfiguration);`
+    - L370: `String artifactFileName = distFile.getName();`
+    - L377: `bwcProject.getConfigurations().create(distributionProject.name);`
+    - L443: `.filter(subproject -> stableProjectNames.contains(subproject.getName()`
+    - L527: `File rootDir = project.getRootDir();`
+    - L591: `Configuration draConfig = project.getConfigurations().create(draConfig`
+    - L607: `File rootDir = project.getRootDir();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalDistributionDownloadPlugin.java`
+    - L88: `.unreleasedInfo(Version.fromString(distribution.getVersion()));`
+    - L93: `+ distribution.getName()`
+    - L116: `Version.fromString(distribution.getVersion()),`
+    - L131: `Version parsedDistVersionNumber = Version.fromString(distribution.getV`
+    - L140: `if (distribution.getType().shouldExtract()) {`
+    - L158: `if (distribution.getType() == ElasticsearchDistributionTypes.INTEG_TES`
+    - L160: `} else if (distribution.getType().isDocker()) {`
+    - L164: `projectPath += distribution.getType() == ElasticsearchDistributionType`
+    - L189: `if (distribution.getType() == ElasticsearchDistributionTypes.ARCHIVE) `
+    - L194: `if (distribution.getType() == InternalElasticsearchDistributionTypes.D`
+    - L197: `if (distribution.getType() == InternalElasticsearchDistributionTypes.D`
+    - L200: `if (distribution.getType() == InternalElasticsearchDistributionTypes.D`
+    - L203: `if (distribution.getType() == InternalElasticsearchDistributionTypes.D`
+    - L206: `return projectName + distribution.getType().getName();`
+    - L206: `return projectName + distribution.getType().getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalTestArtifactExtension.java`
+    - L33: `String name = sourceSet.getName();`
+    - L37: `featureSpec.capability(project.getGroup().toString(), project.getName(`
+    - L37: `featureSpec.capability(project.getGroup().toString(), project.getName(`
+    - L45: `Configuration apiElements = project.getConfigurations().getByName(sour`
+    - L46: `Configuration apiElementsTestArtifacts = project.getConfigurations()`
+    - L50: `dependencies.add(apiElementsTestArtifacts.getName(), projectDependency`
+    - L52: `Configuration runtimeElements = project.getConfigurations().getByName(`
+    - L53: `Configuration runtimeElementsTestArtifacts = project.getConfigurations`
+    - L56: `dependencies.add(runtimeElementsTestArtifacts.getName(), projectDepend`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/InternalTestArtifactPlugin.java`
+    - L28: `if (sourceSet.getName().equals(SourceSet.MAIN_SOURCE_SET_NAME) == fals`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/JarApiComparisonTask.java`
+    - L74: `if (oldJarNames.contains(newJarFile.getName())) {`
+    - L80: `JarScanner oldJS = new JarScanner(getOldJar().get().getSingleFile().ge`
+    - L81: `JarScanner newJS = new JarScanner(newJarFile.getPath());`
+    - L126: `String location = "jar:file://" + getPath() + "!/" + fileInJarPath;`
+    - L127: `return disassemble(location, getPath(), classpath);`
+    - L136: `command.add(Jvm.current().getExecutable("javap").getPath());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/Jdk.java`
+    - L53: `this.configurationName = configuration.getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/JdkDownloadPlugin.java`
+    - L60: `.attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, tarArtifact`
+    - L73: `Configuration configuration = project.getConfigurations().create("jdk_`
+    - L96: `String repoName = REPO_NAME_PREFIX + jdk.getVendor() + "_" + jdk.getVe`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/MrjarPlugin.java`
+    - L84: `configurePreviewFeatures(project, javaExtension.getSourceSets().getByN`
+    - L87: `configurePreviewFeatures(project, javaExtension.getSourceSets().getByN`
+    - L115: `FileCollection mainRuntime = sourceSets.getByName(SourceSet.MAIN_SOURC`
+    - L129: `SourceSet sourceSet = javaExtension.getSourceSets().maybeCreate(source`
+    - L163: `project.getConfigurations().register("java" + javaVersion);`
+    - L165: `task.from(sourceSet.getOutput());`
+    - L188: `jarTask.configure(task -> task.into("META-INF/versions/" + javaVersion`
+    - L206: `FileCollection mainRuntime = sourceSets.getByName(mainSourceSetName).g`
+    - L210: `testTask.setTestClassesDirs(sourceSet.getOutput().getClassesDirs());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/NoticeTask.java`
+    - L73: `outputFile = projectLayout.getBuildDirectory().dir("notices/" + getNam`
+    - L111: `String name = file.getName().replaceFirst("-NOTICE\\.txt$", "");`
+    - L134: `boolean isPackageInfo = sourceFile.getName().equals("package-info.java`
+    - L164: `appendText(header.toString(), isPackageInfo ? packageDeclaration : sou`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/ProjectSubscribeBuildService.java`
+    - L49: `versionsByTopic.computeIfAbsent(topic, k -> new java.util.LinkedHashSe`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/RestrictedBuildApiService.java`
+    - L67: `if (getParameters().getDisabled().getOrElse(false)) {`
+    - L70: `if (isSupported(aClass, project.getPath()) == false) {`
+    - L71: `throw new GradleException("Usage of deprecated " + aClass.getName() + `
+    - L71: `throw new GradleException("Usage of deprecated " + aClass.getName() + `
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/StringTemplatePlugin.java`
+    - L30: `SourceSetContainer sourceSets = project.getExtensions().getByType(Java`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/SymbolicLinkPreservingTar.java`
+    - L119: `file = details.getFile();`
+    - L137: `file = details.getFile();`
+    - L146: `visitedSymbolicLinks.add(details.getFile());`
+    - L151: `entry.setLinkName(Files.readSymbolicLink(details.getFile().toPath()).t`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/dependencies/patches/azurecore/AzureCoreClassPatcher.java`
+    - L51: `if (Pattern.matches(JAR_FILE_TO_PATCH, inputFile.getName())) {`
+    - L52: `System.out.println("Patching " + inputFile.getName());`
+    - L53: `File outputFile = outputs.file(inputFile.getName().replace(".jar", "-p`
+    - L56: `System.out.println("Skipping " + inputFile.getName());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/dependencies/patches/hdfs/HdfsClassPatcher.java`
+    - L124: `List<String> matchingArtifacts = getParameters().getMatchingArtifacts(`
+    - L126: `.filter(jp -> matchingArtifacts.contains(jp.artifactTag()) && jp.artif`
+    - L132: `System.out.println("Patching " + inputFile.getName());`
+    - L133: `File outputFile = outputs.file(inputFile.getName().replace(".jar", "-p`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/dependencies/rules/ExcludeOtherGroupsTransitiveRule.java`
+    - L54: `dependencies.removeIf(dep -> dep.getGroup().equals(context.getDetails(`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/distribution/ElasticsearchDistributionExtension.java`
+    - L35: `var moduleConfigurationCoords = Map.of("path", module.getPath(), "conf`
+    - L37: `return project.getConfigurations().detachedConfiguration(dep);`
+    - L53: `var moduleName = module.getExtensions().getByType(PluginPropertiesExte`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/doc/DocSnippetTask.java`
+    - L70: `if (docFile.getName().endsWith(".asciidoc")) {`
+    - L72: `} else if (docFile.getName().endsWith(".mdx")) {`
+    - L75: `throw new InvalidUserDataException("Unsupported file type: " + docFile`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/doc/DocsTestPlugin.java`
+    - L92: `byType.getSourceSets().getByName("yamlRestTest").getOutput().dir(Map.o`
+    - L92: `byType.getSourceSets().getByName("yamlRestTest").getOutput().dir(Map.o`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/doc/SnippetParserException.java`
+    - L27: `super("Error parsing snippet in " + file.getName() + " at line " + lin`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/DockerBuildTask.java`
+    - L72: `this.markerFile.set(projectLayout.getBuildDirectory().file("markers/" `
+    - L108: `public String[] getTags() {`
+    - L182: `String docker = getParameters().getDockerExecutable().get();`
+    - L213: `final Parameters parameters = getParameters();`
+    - L280: `String docker = getParameters().getDockerExecutable().get();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/DockerSupportPlugin.java`
+    - L34: `throw new IllegalStateException(this.getClass().getName() + " can only`
+    - L42: `params.setExclusionsFile(new File(project.getRootDir(), DOCKER_ON_LINU`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/DockerSupportService.java`
+    - L159: `params.getParameters().getArgs().addAll(args);`
+    - L160: `params.getParameters().getOutputFilter().set(outputFilter);`
+    - L230: `if (getParameters().getIsCI().get().booleanValue() == false) {`
+    - L269: `File exclusionsFile = getParameters().getExclusionsFile();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/DockerValueSource.java`
+    - L40: `return runCommand(getParameters().getArgs().get());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/docker/NativeImageBuildTask.java`
+    - L109: `params.getClasspath().setFrom(getClasspath());`
+    - L112: `params.getMainClass().set(getMainClass());`
+    - L115: `params.getOutputFile().set(getOutputFile());`
+    - L149: `Parameters params = getParameters();`
+    - L160: `List<File> classpathFiles = params.getClasspath().getFiles().stream().`
+    - L202: `args.add("/output/" + outputFile.getName());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/esql/EsqlFunctionPlugin.java`
+    - L68: `if (project.getPath().equals(":x-pack:plugin:esql") == false) {`
+    - L82: `if (project.getPath().equals(":x-pack:plugin:esql")) {`
+    - L92: `coreTestDep.capabilities(caps -> caps.requireCapability(coreProject.ge`
+    - L101: `element -> PlatformUtils.normalize(element.getFile().toString()).conta`
+    - L105: `ideaPlugin.getModel().getModule().getSourceDirs().add(project.file(gen`
+    - L123: `String pluginName = project.getExtensions().getByType(PluginProperties`
+    - L126: `project.getRootDir(),`
+    - L132: `Path docFolder = new File(project.getRootDir(), "docs/reference/query-`
+    - L211: `writer.write(file.getParentFile().getName() + "/" + file.getName());`
+    - L211: `writer.write(file.getParentFile().getName() + "/" + file.getName());`
+    - L353: `String relative = "definition/" + destSub.getName();`
+    - L372: `String n = child.getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/foreign/ForeignLibraryPlugin.java`
+    - L83: `mainSourceSet.getOutput().dir(processAnnotations.flatMap(JavaCompile::`
+    - L95: `Configuration processorConfiguration = project.getConfigurations().cre`
+    - L163: `task.exclude(element -> element.getFile().equals(compiledModuleInfo.ge`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/info/DefaultBuildParameterExtension.java`
+    - L73: `this.runtimeJavaVersion = cache(providers, runtimeJava.getJavaVersion(`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/info/GlobalBuildInfoPlugin.java`
+    - L112: `throw new IllegalStateException(this.getClass().getName() + " can only`
+    - L123: `throw new GradleException("Gradle " + minimumGradleVersion.getVersion(`
+    - L148: `Jvm.current().getJavaVersion(),`
+    - L149: `gitInfo.map(g -> g.getRevision()),`
+    - L160: `spec.getParameters().getBuildParams().set(buildParams);`
+    - L197: `new File(Util.locateElasticsearchWorkspace(project.getGradle()), DEFAU`
+    - L272: `final String gradleJvmVendorDetails = gradleJvmMetadata.getVendor().ge`
+    - L276: `LOGGER.quiet("  Gradle Version        : " + GradleVersion.current().ge`
+    - L280: `final String runtimeJvmVendorDetails = runtimeJvm.getVendor().getDispl`
+    - L373: `JavaVersion currentVersion = Jvm.current().getJavaVersion();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/info/TestSeedValueSource.java`
+    - L21: `public ValueSourceParameters.None getParameters() {`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/packer/CacheCacheableTestFixtures.java`
+    - L53: `WorkQueue workQueue = getWorkerExecutor().classLoaderIsolation(spec ->`
+    - L54: `workQueue.submit(CacheTestFixtureWorkAction.class, params -> params.ge`
+    - L69: `final URLClassLoader urlLoader = createClassLoader(getParameters().get`
+    - L69: `final URLClassLoader urlLoader = createClassLoader(getParameters().get`
+    - L89: `System.out.println("Caching resources from " + cacheableTestFixtureCla`
+    - L93: `System.out.println("Skipping " + cacheableTestFixtureClazz.getName() +`
+    - L95: `System.err.println("Failed caching" + cacheableTestFixtureClazz.getNam`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/packer/CacheTestFixtureResourcesPlugin.java`
+    - L28: `var cacheTestFixturesConfiguration = project.getConfigurations().creat`
+    - L41: `.getSourceSets()`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/CheckForbiddenApisTask.java`
+    - L131: `return new File(projectLayout.getBuildDirectory().getAsFile().get(), "`
+    - L384: `parameters.getClasspath().setFrom(getClasspath());`
+    - L391: `parameters.getIgnoreFailures().set(getIgnoreFailures());`
+    - L422: `final URLClassLoader urlLoader = createClassLoader(getParameters().get`
+    - L422: `final URLClassLoader urlLoader = createClassLoader(getParameters().get`
+    - L422: `final URLClassLoader urlLoader = createClassLoader(getParameters().get`
+    - L429: `final Set<String> suppressAnnotations = getParameters().getSuppressAnn`
+    - L435: `final Set<String> bundledSignatures = getParameters().getBundledSignat`
+    - L437: `final String bundledSigsJavaVersion = getParameters().getTargetCompati`
+    - L450: `final FileCollection signaturesFiles = getParameters().getSignaturesFi`
+    - L454: `final List<String> signatures = getParameters().getSignatures().get();`
+    - L480: `checker.addClassesToCheck(getParameters().getClassFiles());`
+    - L485: `writeMarker(getParameters().getSuccessMarker().getAsFile().get());`
+    - L529: `if (getParameters().getIgnoreMissingClasses().get() == false) {`
+    - L532: `if (getParameters().getIgnoreFailures().get() == false) {`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/CheckstylePrecommitPlugin.java`
+    - L61: `.files(checkstyleConfUrl.getFile(), checkstyleSuppressionsUrl.getFile(`
+    - L61: `.files(checkstyleConfUrl.getFile(), checkstyleSuppressionsUrl.getFile(`
+    - L97: `() -> "org.elasticsearch:build-conventions:" + project.getVersion()`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/DependencyLicensesPrecommitPlugin.java`
+    - L30: `var runtimeClasspath = project.getConfigurations().getByName(JavaPlugi`
+    - L31: `var compileOnly = project.getConfigurations().getByName(CompileOnlyRes`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/DependencyLicensesTask.java`
+    - L220: `String name = file.getName();`
+    - L263: `return Arrays.asList(getLicensesDir().listFiles()).stream().map(f -> f`
+    - L287: `String jarName = dependency.getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ForbiddenApisPrecommitPlugin.java`
+    - L57: `t.setClassesDirs(sourceSet.getOutput().getClassesDirs());`
+    - L70: `if (t.getName().endsWith("Test")) {`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ForbiddenPatternsPrecommitPlugin.java`
+    - L48: `forbiddenPatternsTask.getRootDir().set(project.getRootDir());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ForbiddenPatternsTask.java`
+    - L95: `getInputs().property("excludes", filesFilter.getExcludes());`
+    - L176: `return new File(projectLayout.getBuildDirectory().getAsFile().get(), "`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/JarHellPrecommitPlugin.java`
+    - L24: `if (project.getPath().equals(":libs:core") == false) {`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/JavaModulePrecommitPlugin.java`
+    - L31: `t.setClasspath(project.getConfigurations().getByName(JavaPlugin.COMPIL`
+    - L32: `t.setClassesDirs(mainSourceSet.getOutput().getClassesDirs());`
+    - L33: `t.setResourcesDirs(mainSourceSet.getOutput().getResourcesDir());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/JavaModulePrecommitTask.java`
+    - L115: `getLogger().info("{} checking module {}", getPath(), mod);`
+    - L175: `getLogger().info("{} checking module services for {}", getPath(), mref`
+    - L178: `getLogger().info("{} servicesRoot {}", getPath(), servicesRoot);`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/LoggerUsagePrecommitPlugin.java`
+    - L24: `Configuration loggerUsageConfig = project.getConfigurations().create("`
+    - L32: `SourceSetContainer sourceSets = project.getExtensions().getByType(Java`
+    - L34: `sourceSet -> sourceSet.getName().equals(SourceSet.MAIN_SOURCE_SET_NAME`
+    - L35: `|| sourceSet.getName().equals(SourceSet.TEST_SOURCE_SET_NAME)`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/LoggerUsageTask.java`
+    - L62: `parameters.getClasspath().setFrom(getClasspath());`
+    - L84: `classesDirs.add(sourceSet.getOutput().getClassesDirs());`
+    - L100: `spec.classpath(getParameters().getClasspath());`
+    - L100: `spec.classpath(getParameters().getClasspath());`
+    - L101: `getParameters().getClassDirectories().forEach(spec::args);`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/SplitPackagesAuditPrecommitPlugin.java`
+    - L32: `t.setClasspath(project.getConfigurations().getByName(JavaPlugin.COMPIL`
+    - L44: `buildDirs.put(p.getBuildDir(), p.getPath());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/SplitPackagesAuditTask.java`
+    - L84: `this.markerFile.set(projectLayout.getBuildDirectory().file("markers/" `
+    - L90: `params.getProjectPath().set(projectPath(getPath()));`
+    - L145: `final Parameters parameters = getParameters();`
+    - L198: `for (File classpathElement : getParameters().getClasspath().getFiles()`
+    - L198: `for (File classpathElement : getParameters().getClasspath().getFiles()`
+    - L217: `for (File srcDir : getParameters().getSrcDirs().get()) {`
+    - L257: `for (String fqcn : getParameters().getIgnoreClasses().get().stream().s`
+    - L301: `} else if (classpathElement.getName().endsWith(".jar")) {`
+    - L340: `while (dependencyFile.getName().equals("build") == false) {`
+    - L343: `String projectName = getParameters().getProjectBuildDirs().get().get(d`
+    - L349: `return dependencyFile.getName(); // just the jar filename`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/TestingConventionsCheckTask.java`
+    - L87: `WorkQueue workQueue = getWorkerExecutor().classLoaderIsolation(spec ->`
+    - L89: `parameters.getClasspath().setFrom(getClasspath());`
+    - L90: `parameters.getClassDirectories().setFrom(getTestClassesDirs());`
+    - L115: `getParameters().getClassDirectories().getAsFileTree().visit(fileVisito`
+    - L118: `getParameters().getBaseClassesNames().get(),`
+    - L119: `getParameters().getSuffixes().get()`
+    - L151: `spec -> spec.contextualLabel(clazz.getName())`
+    - L158: `+ mismatchingBaseClasses.stream().map(c -> c.getName()).collect(Collec`
+    - L165: `.filter(c -> suffixes.stream().allMatch(s -> c.getName().endsWith(s) =`
+    - L172: `spec -> spec.contextualLabel(clazz.getName())`
+    - L181: `+ matchingBaseClassNotMatchingSuffix.stream().map(c -> c.getName()).co`
+    - L200: `.debug("{} is a test because it extends {}", clazz.getName(), junitTes`
+    - L200: `.debug("{} is a test because it extends {}", clazz.getName(), junitTes`
+    - L208: `.debug("{} is a test because it has method named '{}'", clazz.getName(`
+    - L208: `.debug("{} is a test because it has method named '{}'", clazz.getName(`
+    - L215: `clazz.getName(),`
+    - L216: `method.getName(),`
+    - L217: `junitAnnotation.getName()`
+    - L225: `throw new IllegalStateException("Failed to inspect class " + clazz.get`
+    - L230: `return method.getName().startsWith(JUNIT3_TEST_METHOD_PREFIX)`
+    - L260: `String fileName = fileVisitDetails.getName();`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/TestingConventionsPrecommitPlugin.java`
+    - L37: `var sourceSets = javaPluginExtension.getSourceSets();`
+    - L107: `task.getTestClassesDirs().from(sourceSet.getOutput().getClassesDirs())`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ThirdPartyAuditPrecommitPlugin.java`
+    - L40: `project.getConfigurations().create("forbiddenApisCliJar");`
+    - L42: `Configuration jdkJarHellConfig = project.getConfigurations().create(JD`
+    - L44: `if (project.getPath().equals(LIBS_ELASTICSEARCH_CORE_PROJECT_PATH) == `
+    - L62: `Configuration runtimeConfiguration = project.getConfigurations().getBy`
+    - L64: `Configuration compileOnly = project.getConfigurations()`
+    - L84: `t.getForbiddenAPIsClasspath().from(project.getConfigurations().getByNa`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ThirdPartyAuditTask.java`
+    - L151: `return projectLayout.getBuildDirectory().dir("precommit/thirdPartyAudi`
+    - L156: `return projectLayout.getBuildDirectory().dir("precommit/thirdPartyAudi`
+    - L343: `spec.eachFile(details -> details.setPath(details.getPath().replace(met`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ValidateJsonAgainstSchemaTask.java`
+    - L166: `getLogger().error("[validate {}][ERROR][{}][{}]", fileType, file.getNa`
+    - L171: `spec -> spec.contextualLabel(fileType + " validation error in " + file`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ValidateJsonNoKeywordsTask.java`
+    - L107: `getLogger().debug("Loading keywords from {}", jsonKeywords.getName());`
+    - L115: `File file = fileChange.getFile();`
+    - L120: `getLogger().debug("Checking {}", file.getName());`
+    - L151: `"'" + component + "' in " + file.getName() + " conflicts with reserved`
+    - L223: `throw new GradleException("Failed to load keywords JSON from " + jsonK`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/precommit/ValidateRestSpecPlugin.java`
+    - L32: `task.setJsonSchema(new File(project.getRootDir(), "rest-api-spec/src/m`
+    - L42: `task.setJsonKeywords(new File(project.getRootDir(), "rest-api-spec/key`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/BundleChangelogsTask.java`
+    - L186: `if (finalEntriesFromBc.contains(f.getName())) {`
+    - L193: `var prNumber = f.getName().replace(".yaml", "");`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/ChangelogEntry.java`
+    - L351: `&& Objects.equals(title, breaking.getTitle())`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/PruneChangelogsTask.java`
+    - L54: `rootDir = project.getRootDir().toPath();`
+    - L98: `.filter(each -> earlierFiles.contains(each.getName()))`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/ReleaseToolsPlugin.java`
+    - L75: `task.setJsonSchema(new File(project.getRootDir(), RESOURCES + "changel`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/UpdateBranchesJsonTask.java`
+    - L173: `throw new UncheckedIOException("Failed to read branches.json from " + `
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/release/UpdateVersionsTask.java`
+    - L76: `return String.format("V_%d_%d_%d", version.getMajor(), version.getMino`
+    - L150: `String.format("%d_%02d_%02d_99", version.getMajor(), version.getMinor(`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/snyk/GenerateSnykDependencyGraph.java`
+    - L80: `getOutputFile().getAsFile().get().toPath(),`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/snyk/SnykDependencyMonitoringGradlePlugin.java`
+    - L46: `generateSnykDependencyGraph.getProjectPath().set(project.getPath());`
+    - L47: `generateSnykDependencyGraph.getProjectName().set(project.getName());`
+    - L49: `String projectVersion = project.getVersion().toString();`
+    - L51: `generateSnykDependencyGraph.getGradleVersion().set(project.getGradle()`
+    - L55: `.convention(providerFactory.provider(() -> GitInfo.gitInfo(project.get`
+    - L60: `t.getInputFile().set(generateTaskProvider.get().getOutputFile());`
+    - L69: `.getSourceSets()`
+    - L71: `Configuration runtimeConfiguration = project.getConfigurations().getBy`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/testfixtures/TestFixturesDeployPlugin.java`
+    - L47: `.register("deploy" + StringUtils.capitalize(fixture.getName()) + "Dock`
+    - L56: `resolveTargetDockerRegistry(fixture) + "/" + fixture.getName() + "-fix`
+    - L61: `task.setDescription("Deploys the " + fixture.getName() + " test fixtur`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/testfixtures/TestFixturesPlugin.java`
+    - L92: `throw new IllegalStateException("No " + DOCKER_COMPOSE_YML + " found f`
+    - L120: `composeExtension.setProjectName(project.getName());`
+    - L180: `LOGGER.info("Task {} requires docker-compose but it is unavailable. Ta`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/transport/GenerateInitialTransportVersionTask.java`
+    - L52: `int increment = stackVersion.getRevision() == 0 ? 1000 : 1;`
+    - L59: `if (stackVersion.getRevision() == 0) {`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/transport/TransportVersionReferencesPlugin.java`
+    - L41: `t.getClassPath().setFrom(mainSourceSet.getOutput());`
+    - L45: `var tvReferencesConfig = project.getConfigurations().consumable("trans`
+    - L48: `project.getArtifacts().add(tvReferencesConfig.getName(), collectTask);`
+    - L54: `t.getReferencesFile().set(collectTask.get().getOutputFile());`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/transport/TransportVersionResourcesPlugin.java`
+    - L58: `spec.getParameters().getTransportResourcesDirectory().set(transportRes`
+    - L59: `spec.getParameters().getRootDirectory().set(project.getLayout().getSet`
+    - L62: `spec.getParameters().getBaseRefOverride().set(upstreamRef.get());`
+    - L67: `var tvReferencesConfig = project.getConfigurations().create("globalTvR`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/util/DependenciesUtils.java`
+    - L53: `.map(dependency -> dependency.getSelected().getId())`
+    - L78: `.filter(dep -> dep.getResolvedVariant().getDisplayName() == ShadowBase`
+    - L80: `.map(dep -> dep.getSelected().getId())`
+- `build-tools-internal/src/main/java/org/elasticsearch/gradle/internal/util/ParamsUtils.java`
+    - L24: `Property<BuildParameterExtension> buildParams = buildParamsRegistratio`
+- `build-tools/src/integTest/groovy/org/elasticsearch/gradle/LoggedExecFuncTest.groovy`
+    - L68: `result.getOutput().contains("OUTPUT HELLO")`
+    - L121: `result.getOutput().contains("The user input is FooBar")`
+- `build-tools/src/main/java/org/elasticsearch/gradle/DistributionDownloadPlugin.java`
+    - L82: `transformSpec.getFrom().attribute(ArtifactTypeDefinition.ARTIFACT_TYPE`
+    - L93: `var fileConfiguration = project.getConfigurations().create(DISTRO_CONF`
+    - L95: `var extractedConfiguration = project.getConfigurations().create(DISTRO`
+    - L119: `Configuration distroConfig = project.getConfigurations().getByName(DIS`
+    - L119: `Configuration distroConfig = project.getConfigurations().getByName(DIS`
+    - L129: `Configuration extractedDistroConfig = project.getConfigurations()`
+    - L130: `.getByName(DISTRO_EXTRACTED_CONFIG_PREFIX + distribution.getName());`
+    - L135: `frozenDistro -> distribution.getType().shouldExtract()`
+    - L162: `if (distribution.getType() == ElasticsearchDistributionTypes.INTEG_TES`
+    - L163: `return "org.elasticsearch.distribution.integ-test-zip:elasticsearch:" `
+    - L165: `var distroVersion = Version.fromString(distribution.getVersion());`
+    - L166: `var extension = distribution.getType().getExtension(distribution.getPl`
+    - L167: `var classifier = distribution.getType().getClassifier(distribution.get`
+    - L168: `var group = distribution.getVersion().endsWith("-SNAPSHOT") ? FAKE_SNA`
+    - L169: `return group + ":elasticsearch" + ":" + distribution.getVersion() + cl`
+- `build-tools/src/main/java/org/elasticsearch/gradle/ElasticsearchDistribution.java`
+    - L129: `if (type.equals(ElasticsearchDistributionTypes.ARCHIVE.getName())) {`
+    - L131: `} else if (type.equals(ElasticsearchDistributionTypes.INTEG_TEST_ZIP.g`
+    - L198: `if (getType().shouldExtract() == false) {`
+    - L200: `"distribution type [" + getType().getName() + "] for " + "elasticsearc`
+    - L200: `"distribution type [" + getType().getName() + "] for " + "elasticsearc`
+    - L230: `if (getType() == ElasticsearchDistributionTypes.INTEG_TEST_ZIP) {`
+    - L246: `"failIfUnavailable cannot be 'false' on elasticsearch distribution [" `
+    - L250: `if (getType() == ElasticsearchDistributionTypes.ARCHIVE) {`
+    - L258: `"platform cannot be set on elasticsearch distribution [" + name + "] o`
+- `build-tools/src/main/java/org/elasticsearch/gradle/LazyPropertyList.java`
+    - L78: `throw new UnsupportedOperationException(this.getClass().getName() + " `
+    - L103: `throw new UnsupportedOperationException(this.getClass().getName() + " `
+    - L108: `throw new UnsupportedOperationException(this.getClass().getName() + " `
+- `build-tools/src/main/java/org/elasticsearch/gradle/LazyPropertyMap.java`
+    - L101: `throw new UnsupportedOperationException(this.getClass().getName() + " `
+- `build-tools/src/main/java/org/elasticsearch/gradle/LoggedExec.java`
+    - L242: `"Capturing output was not enabled. Use " + getName() + ".getCapturedOu`
+- `build-tools/src/main/java/org/elasticsearch/gradle/ReaperPlugin.java`
+    - L53: `spec.getParameters().getInputDir().set(inputDir);`
+    - L54: `spec.getParameters().getBuildDir().set(projectLayout.getBuildDirectory`
+    - L55: `spec.getParameters().setInternal(internal);`
+- `build-tools/src/main/java/org/elasticsearch/gradle/ReaperService.java`
+    - L81: `Path inputDir = getParameters().getInputDir().get().getAsFile().toPath`
+    - L95: `Path inputDir = getParameters().getInputDir().get().getAsFile().toPath`
+    - L128: `if (getParameters().getInternal()) {`
+    - L131: `String mainPath = main.getFile();`
+    - L142: `Path jarPath = getParameters().getBuildDir().get().getAsFile().toPath(`
+- `build-tools/src/main/java/org/elasticsearch/gradle/dependencies/CompileOnlyResolvePlugin.java`
+    - L23: `project.getConfigurations().all(configuration -> {`
+    - L24: `if (configuration.getName().equals(JavaPlugin.COMPILE_ONLY_CONFIGURATI`
+    - L25: `NamedDomainObjectProvider<Configuration> resolvableCompileOnly = proje`
+- `build-tools/src/main/java/org/elasticsearch/gradle/jarhell/JarHellPlugin.java`
+    - L27: `Configuration jarHellConfig = project.getConfigurations().create("jarH`
+- `build-tools/src/main/java/org/elasticsearch/gradle/jarhell/JarHellTask.java`
+    - L52: `return new File(projectLayout.getBuildDirectory().getAsFile().get(), "`
+    - L58: `spec.environment("CLASSPATH", getJarHellRuntimeClasspath().plus(getCla`
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/BasePluginBuildPlugin.java`
+    - L80: `project.getConfigurations().getByName("default").extendsFrom(project.g`
+    - L80: `project.getConfigurations().getByName("default").extendsFrom(project.g`
+    - L86: `if (GradleUtils.isModuleProject(project.getPath())) {`
+    - L125: `FileCollection moduleInfoFile = mainSourceSet.getOutput()`
+    - L138: `testSourceSet.getOutput().dir(map, generatedResources);`
+    - L143: `project.getConfigurations().create("pluginMetadata", conf -> {`
+    - L164: `var configuration = project.getConfigurations().create("zip");`
+    - L170: `sync.into(new File(project.getBuildDir(), "explodedBundle/" + extensio`
+    - L174: `var explodedBundleZip = project.getConfigurations().create(EXPLODED_BU`
+    - L197: `project.getConfigurations()`
+    - L199: `.minus(project.getConfigurations().getByName(CompileOnlyResolvePlugin.`
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/GenerateNamedComponentsTask.java`
+    - L61: `spec.classpath(pluginScannerClasspath.plus(getClasspath()).getAsPath()`
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/GenerateTestBuildInfoTask.java`
+    - L128: `if (file.getName().endsWith(JAR_DESCRIPTOR_SUFFIX)) {`
+    - L162: `je -> je.getName().startsWith("META-INF") == false`
+    - L163: `&& je.getName().equals("module-info.class") == false`
+    - L164: `&& je.getName().contains("$") == false`
+    - L165: `&& je.getName().endsWith(".class")`
+    - L214: `.filter(je -> je.getName().startsWith(META_INF_VERSIONS_PREFIX) && je.`
+    - L214: `.filter(je -> je.getName().startsWith(META_INF_VERSIONS_PREFIX) && je.`
+    - L217: `je.getName().substring(META_INF_VERSIONS_PREFIX.length(), je.getName()`
+    - L217: `je.getName().substring(META_INF_VERSIONS_PREFIX.length(), je.getName()`
+    - L269: `String jn = jarFile.getName().substring(0, jarFile.getName().length() `
+    - L269: `String jn = jarFile.getName().substring(0, jarFile.getName().length() `
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/PluginBuildPlugin.java`
+    - L77: `+ project.getExtensions().getByType(PluginPropertiesExtension.class).g`
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/PluginPropertiesExtension.java`
+    - L66: `return name == null ? project.getName() : name;`
+    - L75: `return version == null ? project.getVersion().toString() : version;`
+- `build-tools/src/main/java/org/elasticsearch/gradle/plugin/StablePluginBuildPlugin.java`
+    - L42: `FileCollection dependencyJars = project.getConfigurations().getByName(`
+    - L43: `FileCollection compiledPluginClasses = mainSourceSet.getOutput().getCl`
+    - L47: `Configuration pluginScannerConfig = project.getConfigurations().create`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/ElasticsearchCluster.java`
+    - L160: `return pluginAndModuleConfiguration.getAsFileTree().filter(f -> f.getN`
+    - L166: `return pluginAndModuleConfiguration.getAsFileTree().filter(f -> f.getN`
+    - L255: `Configuration extractedConfig = project.getConfigurations().detachedCo`
+    - L304: `return project.getConfigurations().detachedConfiguration(bundleDepende`
+    - L457: `assert node.getVersion().onOrAfter("7.0.0") : node.getVersion();`
+    - L457: `assert node.getVersion().onOrAfter("7.0.0") : node.getVersion();`
+    - L499: `return node.getVersion().onOrAfter("7.16.0") && node.getSettingKeys().`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/ElasticsearchNode.java`
+    - L240: `return Version.fromString(distributions.get(currentDistro).getVersion(`
+    - L501: `if (getVersion().onOrAfter("7.6.0")) {`
+    - L592: `logToProcessStdout("Switch version from " + getVersion() + " to " + di`
+    - L592: `logToProcessStdout("Switch version from " + getVersion() + " to " + di`
+    - L633: `if (from.getName().endsWith(".jar") == false) {`
+    - L637: `Path destination = getDistroDir().resolve("lib").resolve(from.getName(`
+    - L640: `LOGGER.info("Added extra jar {} to {}", from.getName(), destination);`
+    - L642: `throw new UncheckedIOException("Can't copy extra jar dependency " + fr`
+    - L653: `getVersion().onOrAfter("6.3.0") ? "elasticsearch-users" : "x-pack/user`
+    - L687: `.resolve(module.get().getName().replace(".zip", "").replace("-" + getV`
+    - L687: `.resolve(module.get().getName().replace(".zip", "").replace("-" + getV`
+    - L691: `if (module.get().getName().toLowerCase().endsWith(".zip")) {`
+    - L800: `if (getTestDistribution() == TestDistribution.INTEG_TEST || getVersion`
+    - L808: `else if (jdkIsIncompatibleWithOS(getVersion())) {`
+    - L835: `if (featureFlags.isEmpty() == false && isReleasedVersion.apply(getVers`
+    - L837: `.filter(f -> getVersion().onOrAfter(f.getFrom()) && (f.getUntil() == n`
+    - L837: `.filter(f -> getVersion().onOrAfter(f.getFrom()) && (f.getUntil() == n`
+    - L932: `: workingDir.resolve("distro").resolve(getVersion() + "-" + testDistri`
+    - L1361: `if (noFileException.getFile() != null && noFileException.getFile().con`
+    - L1361: `if (noFileException.getFile() != null && noFileException.getFile().con`
+    - L1362: `LOGGER.info("Ignoring file left behind by JVM: {}", noFileException.ge`
+    - L1389: `if (getVersion().onOrAfter(Version.fromString("6.7.0"))) {`
+    - L1398: `if (getVersion().onOrAfter("7.9.0")) {`
+    - L1403: `if (getVersion().getMajor() >= 6) {`
+    - L1409: `if (getVersion().getMajor() >= 7) {`
+    - L1415: `if (getVersion().getMajor() >= 8) {`
+    - L1423: `if (getVersion().onOrAfter("7.4.0")) {`
+    - L1499: `Version version = getVersion();`
+    - L1785: `public CharSequence[] getArgs() {`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/MockApmServer.java`
+    - L103: `logger.lifecycle("MockApmServer started on port " + server.getAddress(`
+    - L103: `logger.lifecycle("MockApmServer started on port " + server.getAddress(`
+    - L110: `return instance.getAddress().getPort();`
+    - L110: `return instance.getAddress().getPort();`
+    - L137: `if ("GET".equals(t.getRequestMethod()) && "/".equals(t.getRequestURI()`
+    - L248: `String name = metric.getName();`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/RunTask.java`
+    - L72: `new File(getProject().getRootDir(), "build-tools-internal/src/main/res`
+    - L244: `Map<String, String> additionalSettings = System.getProperties()`
+    - L259: `getDataPath = n -> dataDir.resolve(n.getName());`
+    - L306: `node.setting("telemetry.agent.server_url", "http://127.0.0.1:" + mockS`
+    - L308: `node.setting("telemetry.otel.metrics.endpoint", "http://127.0.0.1:" + `
+    - L339: `throw new GradleException("Task " + getPath() + " is not configured to`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/TestClusterValueSource.java`
+    - L22: `String clusterName = getParameters().getClusterName().get();`
+    - L23: `String path = getParameters().getPath().get();`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/TestClustersAware.java`
+    - L35: `if (cluster.getPath().equals(getProject().getPath()) == false) {`
+    - L35: `if (cluster.getPath().equals(getProject().getPath()) == false) {`
+    - L36: `throw new TestClustersException("Task " + getPath() + " can't use test`
+    - L38: `if (cluster.getName().equals(getName())) {`
+    - L38: `if (cluster.getName().equals(getName())) {`
+    - L52: `source.getParameters().getService().set(getRegistry());`
+    - L53: `source.getParameters().getClusterName().set(clusterName);`
+    - L54: `source.getParameters().getPath().set(getProject().getIsolated().getPat`
+    - L54: `source.getParameters().getPath().set(getProject().getIsolated().getPat`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/TestClustersPlugin.java`
+    - L165: `transformSpec.getParameters().setAsFiletreeOutput(true);`
+    - L179: `project.getPath(),`
+    - L205: `(Task t) -> container.forEach(cluster -> logger.lifecycle("   * {}: {}`
+    - L220: `throw new IllegalStateException(this.getClass().getName() + " can only`
+    - L230: `spec.getParameters().getRegistry().set(registryProvider);`
+    - L292: `tasksMap.put(task.getPath(), task);`
+    - L306: `task.getClusters().forEach(cluster -> getParameters().getRegistry().ge`
+- `build-tools/src/main/java/org/elasticsearch/gradle/testclusters/TestClustersRegistry.java`
+    - L52: `spec.getParameters().getService().set(TestClustersRegistry.this);`
+    - L53: `spec.getParameters().getClusterName().set(clusterName);`
+    - L91: `.filter(c -> c.getPath().equals(path))`
+    - L92: `.filter(c -> c.getName().equals(clusterName))`
+    - L104: `.filter(c -> c.getPath().equals(path))`
+    - L105: `.filter(c -> c.getName().equals(clusterName))`
+    - L116: `nextNodeToNextVersion(cluster.getPath(), cluster.getName());`
+    - L116: `nextNodeToNextVersion(cluster.getPath(), cluster.getName());`
+    - L121: `.filter(c -> c.getPath().equals(path))`
+    - L122: `.filter(c -> c.getName().equals(clusterName))`
+- `build-tools/src/main/java/org/elasticsearch/gradle/transform/FilteringJarTransform.java`
+    - L53: `File transformed = outputs.file(original.getName());`
+    - L54: `List<PathMatcher> excludes = createMatchers(getParameters().getExclude`
+    - L54: `List<PathMatcher> excludes = createMatchers(getParameters().getExclude`
+    - L63: `if (excludes.stream().noneMatch(e -> e.matches(Path.of(entry.getName()`
+    - L85: `config.execute(spec.getParameters());`
+- `build-tools/src/main/java/org/elasticsearch/gradle/transform/SymbolicLinkPreservingUntarTransform.java`
+    - L40: `final Path relativePath = pathModifier.apply(entry.getName());`
+- `build-tools/src/main/java/org/elasticsearch/gradle/transform/UnpackTransform.java`
+    - L84: `File extractedDir = outputs.dir(archiveFile.getName());`
+    - L86: `if (getParameters().getIncludeArtifactName().getOrElse(false)) {`
+    - L87: `extractedDir = new File(extractedDir, archiveFile.getName());`
+    - L91: `LOGGER.info("Unpacking {} using {}.", archiveFile.getName(), getClass(`
+    - L92: `unpack(archiveFile, extractedDir, outputs, getParameters().getAsFiletr`
+    - L98: `LOGGER.warn("Unable to calculate hash for file " + archiveFile.getPath`
+    - L100: `throw new UncheckedIOException("Failed to unpack " + archiveFile.getNa`
+    - L107: `List<String> keepPatterns = getParameters().getKeepStructureFor();`
+    - L108: `String trimmedPrefixPattern = getParameters().getTrimmedPrefixPattern(`
+- `build-tools/src/main/java/org/elasticsearch/gradle/transform/UnzipTransform.java`
+    - L34: `.info("Unpacking " + zipFile.getName() + " using " + UnzipTransform.cl`
+    - L41: `Path child = pathModifier.apply(zipEntry.getName());`
+- `build-tools/src/main/java/org/elasticsearch/gradle/util/GradleUtils.java`
+    - L44: `return project.getExtensions().getByType(JavaPluginExtension.class).ge`
+    - L48: `tasks.matching(t -> t.getName().equals(name)).configureEach(config);`
+    - L57: `tasks.withType(type).matching((Spec<T>) t -> t.getName().equals(name))`
+    - L98: `task.setTestClassesDirs(testSourceSet.getOutput().getClassesDirs());`
+    - L104: `Configuration testCompileConfig = project.getConfigurations().getByNam`
+    - L105: `Configuration testRuntimeConfig = project.getConfigurations().getByNam`
+    - L107: `testSourceSet.setRuntimeClasspath(project.getObjects().fileCollection(`
+    - L122: `Configuration runtimeClasspathConfiguration = project.getConfiguration`
+    - L125: `idea.getModule().getTestSources().from(testSourceSet.getJava().getSrcD`
+    - L126: `idea.getModule().getScopes().put(testSourceSet.getName(), Map.of("plus`
+    - L126: `idea.getModule().getScopes().put(testSourceSet.getName(), Map.of("plus`
+    - L146: `Configuration parentConfig = project.getConfigurations().getByName(par`
+    - L147: `Configuration childConfig = project.getConfigurations().getByName(chil`
+    - L152: `child.setCompileClasspath(project.getObjects().fileCollection().from(c`
+    - L153: `child.setRuntimeClasspath(project.getObjects().fileCollection().from(c`
+- `build-tools/src/testFixtures/groovy/org/elasticsearch/gradle/fixtures/AbstractGradleFuncTest.groovy`
+    - L139: `assertOutputMissing(result.getOutput(), "Deprecated Gradle features we`
+- `build-tools/src/testFixtures/groovy/org/elasticsearch/gradle/fixtures/DistributionDownloadFixture.groovy`
+    - L58: `List<String> givenArguments = gradleRunner.getArguments()`
+- `build-tools/src/testFixtures/groovy/org/elasticsearch/gradle/fixtures/JdkToolchainTestFixture.groovy`
+    - L50: `List<String> givenArguments = gradleRunner.getArguments()`
+- `build.gradle`
+    - L500: `Files.copy(getPropertiesFile().toPath(), file.toPath(), REPLACE_EXISTI`
+    - L503: `Files.copy(getPropertiesFile().toPath(), examplePluginsWrapperProperti`
+- `distribution/packages/build.gradle`
+    - L532: `final String[] actualLines = getOutput().split("\n")`
+    - L559: `String license = getOutput()`
+- `modules/reindex/build.gradle`
+    - L175: `"${ -> oldEsDependency.singleFile.getPath()}",`
+    - L238: `"${ -> dist.extracted.getSingleFile().getPath() }",`
+- `modules/repository-azure/build.gradle`
+    - L322: `setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())`
+- `modules/repository-gcs/build.gradle`
+    - L275: `setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())`
+- `modules/transport-netty4/build.gradle`
+    - L79: `setTestClassesDirs(internalTestSourceSet.getOutput().getClassesDirs())`
+- `qa/full-cluster-restart/build.gradle`
+    - L27: `if (allTasks.hasTask(getPath())) {`
+- `qa/mixed-cluster/build.gradle`
+    - L88: `def clusterPath = getPath()`
+- `x-pack/plugin/core/template-resources/build.gradle`
+    - L15: `var explodedBundleDir = project.getConfigurations().create("explodedBu`
+- `x-pack/qa/repository-old-versions/build.gradle`
+    - L176: `it.nonInputProperties.systemProperty('tests.clustername', "${-> testCl`
+- `x-pack/qa/rolling-upgrade-multi-cluster/build.gradle`
+    - L41: `def baseClusterName = getName().substring(0, getName().lastIndexOf("#"`
+    - L41: `def baseClusterName = getName().substring(0, getName().lastIndexOf("#"`
+

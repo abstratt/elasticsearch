@@ -96,7 +96,8 @@ public class ElasticsearchJavaBasePlugin implements Plugin<Project> {
             // don't even think about passing args with -J-xxx, oracle will ask you to submit a bug report :)
             // fail on all javac warnings.
             // TODO Discuss moving compileOptions.getCompilerArgs() to use provider api with Gradle team.
-            List<String> compilerArgs = compileOptions.getCompilerArgs();
+            // getCompilerArgs() now returns a lazy ListProperty<String>; keep mutating via add(...)
+            var compilerArgs = compileOptions.getCompilerArgs();
             compilerArgs.add("-Werror");
             int compilerMajor = Integer.parseInt(buildParams.getMinimumRuntimeVersion().getMajorVersion());
             String xlintExclusions = "all,-path,-serial,-options,-deprecation,-try,-removal,-processing";
