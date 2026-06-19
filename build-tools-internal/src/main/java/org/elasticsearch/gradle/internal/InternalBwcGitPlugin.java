@@ -100,7 +100,7 @@ public class InternalBwcGitPlugin implements Plugin<Project> {
                 @Override
                 public void execute(Task task) {
                     LoggedExec.exec(execOperations, spec -> {
-                        spec.getWorkingDir().set(gitExtension.getCheckoutDir());
+                        spec.getWorkingDir().fileProvider(gitExtension.getCheckoutDir());
                         String remoteRepo = remote.get();
                         // for testing only we can override the base remote url
                         String remoteRepoUrl = providerFactory.systemProperty("testRemoteRepo")

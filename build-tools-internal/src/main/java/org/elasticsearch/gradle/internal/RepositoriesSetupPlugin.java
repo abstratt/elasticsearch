@@ -52,7 +52,7 @@ public class RepositoriesSetupPlugin implements Plugin<Project> {
             String revision = matcher.group(1);
             MavenArtifactRepository luceneRepo = repos.maven(repo -> {
                 repo.setName("lucene-snapshots");
-                repo.getUrl().set("https://s3.amazonaws.com/download.elasticsearch.org/lucenesnapshots/" + revision);
+                repo.getUrl().set(java.net.URI.create("https://s3.amazonaws.com/download.elasticsearch.org/lucenesnapshots/" + revision));
             });
             repos.exclusiveContent(exclusiveRepo -> {
                 exclusiveRepo.filter(
@@ -66,7 +66,7 @@ public class RepositoriesSetupPlugin implements Plugin<Project> {
         if (cuvsVersion.contains("-SNAPSHOT")) {
             MavenArtifactRepository cuvsRepo = repos.maven(repo -> {
                 repo.setName("cuvs-snapshots");
-                repo.getUrl().set("https://storage.googleapis.com/elasticsearch-cuvs-snapshots");
+                repo.getUrl().set(java.net.URI.create("https://storage.googleapis.com/elasticsearch-cuvs-snapshots"));
             });
             repos.exclusiveContent(exclusiveRepo -> {
                 exclusiveRepo.filter(descriptor -> descriptor.includeVersionByRegex("com\\.nvidia\\.cuvs", ".*", ".*-SNAPSHOT"));

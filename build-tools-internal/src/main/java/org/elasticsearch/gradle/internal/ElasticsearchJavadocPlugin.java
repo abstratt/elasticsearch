@@ -99,7 +99,7 @@ public class ElasticsearchJavadocPlugin implements Plugin<Project> {
             project.evaluationDependsOn(upstreamProject.getPath());
             project.getTasks().named("javadoc", Javadoc.class).configure(javadoc -> {
                 Javadoc upstreamJavadoc = upstreamProject.getTasks().named("javadoc", Javadoc.class).get();
-                javadoc.getSource().set(javadoc.getSource().plus(upstreamJavadoc.getSource()));
+                javadoc.setSource(javadoc.getSource().plus(upstreamJavadoc.getSource()));
                 // setClasspath(getClasspath().plus(upstream)) set the classpath to (current ∪ upstream).
                 // Since the old value already included the current classpath, appending upstream via from()
                 // preserves that semantics lazily and avoids a self-referential setFrom() that would re-query

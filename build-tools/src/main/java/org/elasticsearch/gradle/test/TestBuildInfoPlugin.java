@@ -60,6 +60,11 @@ public class TestBuildInfoPlugin implements Plugin<Project> {
         project.getTasks()
             .withType(Test.class)
             .matching(test -> List.of("test", "internalClusterTest").contains(test.getName()))
-            .configureEach(test -> test.getSystemProperties().putIfAbsent("es.entitlement.enableForTests", "true"));
+            .configureEach(test -> {
+                // systemProperties is now a MapProperty (no putIfAbsent); only set when the key is absent
+                if (test.getSystemProperties().getOrElse(java.util.Collections.emptyMap()).containsKey("es.entitlement.enableForTests") == false) {
+                    test.getSystemProperties().put("es.entitlement.enableForTests", "true");
+                }
+            });
     }
 }

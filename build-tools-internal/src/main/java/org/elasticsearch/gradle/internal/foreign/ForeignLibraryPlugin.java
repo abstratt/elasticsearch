@@ -112,7 +112,7 @@ public class ForeignLibraryPlugin implements Plugin<Project> {
         TaskProvider<JavaCompile> task = project.getTasks().register(PROCESS_ANNOTATIONS_TASK_NAME, JavaCompile.class, t -> {
             t.setSource(mainSourceSet.getJava());
             t.getClasspath().setFrom(compileClasspath);
-            t.getOptions().setAnnotationProcessorPath(processorConfiguration);
+            t.getOptions().getAnnotationProcessorPath().setFrom(processorConfiguration);
             t.getDestinationDirectory().set(project.getLayout().getBuildDirectory().dir(GENERATED_CLASSES_DIR));
             t.getOptions().getCompilerArgs().add("-proc:only");
             t.getOptions().getCompilerArgumentProviders().add(() -> List.of("-AjavaVersion=" + releaseVersion.get()));

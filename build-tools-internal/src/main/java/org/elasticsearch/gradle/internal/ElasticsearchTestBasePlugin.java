@@ -225,9 +225,9 @@ public abstract class ElasticsearchTestBasePlugin implements Plugin<Project> {
             test.systemProperty("io.netty.recycler.maxCapacityPerThread", "0");
 
             test.testLogging(logging -> {
-                logging.setShowExceptions(true);
-                logging.setShowCauses(true);
-                logging.setExceptionFormat("full");
+                logging.getShowExceptions().set(true);
+                logging.getShowCauses().set(true);
+                logging.getExceptionFormat().set(org.gradle.api.tasks.testing.logging.TestExceptionFormat.FULL);
             });
 
             if (OS.current().equals(OS.WINDOWS) && System.getProperty("tests.timeoutSuite") == null) {
